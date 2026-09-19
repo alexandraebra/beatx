@@ -35,7 +35,7 @@ pub mod beatx {
 
     pub fn create_market(ctx: Context<CreateMarket>, market_id: [u8; 32], policy_hash: [u8; 32], option_hashes: Vec<[u8; 32]>, open_time: i64, close_time: i64, resolution_deadline: i64) -> Result<()> {
         require!(option_hashes.len() >= 2 && option_hashes.len() <= MAX_OPTIONS, BeatXError::InvalidOptions);
-        require!(open_time < close_time && close_time <= resolution_deadline, BeatXError::InvalidTimes);
+        require!(open_time >= Clock::get()?.unix_timestamp && open_time < close_time && close_time <= resolution_deadline, BeatXError::InvalidTimes);
         let market = &mut ctx.accounts.market;
         market.creator = ctx.accounts.creator.key();
         market.authority = ctx.accounts.authority.key();
@@ -130,6 +130,7 @@ pub mod beatx {
         position.claimed = true;
         if position.option_index != market.winning_option { return Ok(()); }
         let winning_pool = market.option_totals[market.winning_option as usize];
+        require!(winning_pool > 0, BeatXError::InvalidResolution);
         let distributable = market.total_volume.checked_sub(market.protocol_fees_base).ok_or(BeatXError::ArithmeticOverflow)?.checked_sub(market.creator_fees_base).ok_or(BeatXError::ArithmeticOverflow)?;
         let payout = (position.amount_base_units as u128).checked_mul(distributable as u128).ok_or(BeatXError::ArithmeticOverflow)? / winning_pool as u128;
         require!(payout <= ctx.accounts.vault.amount as u128, BeatXError::InsufficientVault);
