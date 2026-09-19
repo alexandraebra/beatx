@@ -20,7 +20,10 @@ npm run typecheck
 npm test
 npm run build
 npm run api:build
+npm run e2e:demo
 ```
+
+The acceptance evidence is recorded in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md).
 
 Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, and emits an evidence hash.
 
