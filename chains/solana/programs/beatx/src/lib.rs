@@ -51,6 +51,8 @@ pub mod beatx {
         market.option_totals = vec![0; market.option_hashes.len()];
         market.protocol_fee_bps = ctx.accounts.config.protocol_fee_bps;
         market.creator_fee_bps = ctx.accounts.config.creator_fee_bps;
+        market.protocol_fees_base = 0;
+        market.creator_fees_base = 0;
         market.bump = ctx.bumps.market;
         Ok(())
     }
@@ -69,6 +71,10 @@ pub mod beatx {
         require!((option_index as usize) < market.option_totals.len() && amount_base_units > 0, BeatXError::InvalidPosition);
         market.total_volume = market.total_volume.checked_add(amount_base_units).ok_or(BeatXError::ArithmeticOverflow)?;
         market.option_totals[option_index as usize] = market.option_totals[option_index as usize].checked_add(amount_base_units).ok_or(BeatXError::ArithmeticOverflow)?;
+        let protocol_fee = amount_base_units.checked_mul(market.protocol_fee_bps as u64).ok_or(BeatXError::ArithmeticOverflow)? / BPS;
+        let creator_fee = amount_base_units.checked_mul(market.creator_fee_bps as u64).ok_or(BeatXError::ArithmeticOverflow)? / BPS;
+        market.protocol_fees_base = market.protocol_fees_base.checked_add(protocol_fee).ok_or(BeatXError::ArithmeticOverflow)?;
+        market.creator_fees_base = market.creator_fees_base.checked_add(creator_fee).ok_or(BeatXError::ArithmeticOverflow)?;
         market.status = LOCKED;
         let position = &mut ctx.accounts.position;
         position.market = market.key();
@@ -122,9 +128,10 @@ pub mod beatx {
         require!(market.status == RESOLVED, BeatXError::ResolutionNotFinal);
         require!(!position.claimed, BeatXError::DoubleClaim);
         position.claimed = true;
-        require!(position.option_index == market.winning_option, BeatXError::PositionLost);
+        if position.option_index != market.winning_option { return Ok(()); }
         let winning_pool = market.option_totals[market.winning_option as usize];
-        let payout = (position.amount_base_units as u128).checked_mul(market.total_volume as u128).ok_or(BeatXError::ArithmeticOverflow)? / winning_pool as u128;
+        let distributable = market.total_volume.checked_sub(market.protocol_fees_base).ok_or(BeatXError::ArithmeticOverflow)?.checked_sub(market.creator_fees_base).ok_or(BeatXError::ArithmeticOverflow)?;
+        let payout = (position.amount_base_units as u128).checked_mul(distributable as u128).ok_or(BeatXError::ArithmeticOverflow)? / winning_pool as u128;
         require!(payout <= ctx.accounts.vault.amount as u128, BeatXError::InsufficientVault);
         let seeds: &[&[u8]] = &[b"market", market.authority.as_ref(), market.market_id.as_ref(), &[market.bump]];
         token::transfer(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer { from: ctx.accounts.vault.to_account_info(), to: ctx.accounts.owner_token_account.to_account_info(), authority: market.to_account_info() }, &[seeds]), payout as u64)?;
@@ -190,7 +197,8 @@ pub struct PlacePosition<'info> {
 
 #[derive(Accounts)]
 pub struct ResolutionAuthority<'info> {
-    #[account(mut, has_one = authority @ BeatXError::Unauthorized)] pub market: Account<'info, Market>,
+    #[account(mut)] pub market: Account<'info, Market>,
+    #[account(seeds = [b"protocol"], bump = config.bump, has_one = authority @ BeatXError::Unauthorized)] pub config: Account<'info, ProtocolConfig>,
     pub authority: Signer<'info>,
 }
 
@@ -216,9 +224,9 @@ impl Creator { const SIZE: usize = 32 + 8 + 8 + 8 + 1; }
 pub struct Market {
     pub creator: Pubkey, pub authority: Pubkey, pub market_id: [u8; 32], pub policy_hash: [u8; 32], pub option_hashes: Vec<[u8; 32]>,
     pub open_time: i64, pub close_time: i64, pub resolution_deadline: i64, pub status: u8, pub winning_option: u8, pub vault: Pubkey,
-    pub total_volume: u64, pub option_totals: Vec<u64>, pub protocol_fee_bps: u16, pub creator_fee_bps: u16, pub evidence_hash: [u8; 32], pub bump: u8,
+    pub total_volume: u64, pub option_totals: Vec<u64>, pub protocol_fee_bps: u16, pub creator_fee_bps: u16, pub protocol_fees_base: u64, pub creator_fees_base: u64, pub evidence_hash: [u8; 32], pub bump: u8,
 }
-impl Market { const SIZE: usize = 32 + 32 + 32 + 32 + 4 + MAX_OPTIONS * 32 + 8 + 8 + 8 + 1 + 1 + 32 + 8 + 4 + MAX_OPTIONS * 8 + 2 + 2 + 32 + 1; }
+impl Market { const SIZE: usize = 32 + 32 + 32 + 32 + 4 + MAX_OPTIONS * 32 + 8 + 8 + 8 + 1 + 1 + 32 + 8 + 4 + MAX_OPTIONS * 8 + 2 + 2 + 8 + 8 + 32 + 1; }
 
 #[account]
 pub struct Position { pub market: Pubkey, pub owner: Pubkey, pub position_id: u64, pub option_index: u8, pub amount_base_units: u64, pub claimed: bool, pub bump: u8 }
@@ -240,7 +248,6 @@ pub enum BeatXError {
     #[msg("Invalid resolution evidence")] InvalidResolution,
     #[msg("Resolution is not final")] ResolutionNotFinal,
     #[msg("Position was already claimed")] DoubleClaim,
-    #[msg("Position did not win")] PositionLost,
     #[msg("Vault cannot cover payout")] InsufficientVault,
     #[msg("Arithmetic overflow")] ArithmeticOverflow,
     #[msg("Market is already open")] MarketAlreadyOpen,
