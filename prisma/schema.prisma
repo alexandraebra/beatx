@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MarketStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  CLOSED
+  RESOLVED
+  CANCELLED
+}
+
+enum PositionStatus {
+  OPEN
+  WON
+  LOST
+  REFUNDED
+}
+
+model User {
+  id            String          @id @default(cuid())
+  walletAddress String          @unique
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  creator       CreatorProfile?
+  positions     Position[]
+  comments      Comment[]
+  follows       Follow[]
+  activities    MarketActivity[]
+}
+
+model CreatorProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  displayName         String
+  bio                 String?
+  marketsCreated      Int      @default(0)
+  marketsSettled      Int      @default(0)
+  totalVolumeBase     BigInt   @default(0)
+  participantsAttracted Int    @default(0)
+  followers           Int      @default(0)
+  creatorRevenueBase  BigInt   @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  markets             Market[]
+}
+
+model Market {
+  id                  String          @id @default(cuid())
+  creatorId           String
+  question            String
+  description         String?
+  category            String
+  marketType          String
+  status              MarketStatus    @default(DRAFT)
+  openAt              DateTime
+  closeAt             DateTime
+  resolutionDeadline  DateTime
+  settlementAsset     String
+  policyHash          String          @unique
+  policyJson          Json
+  totalVolumeBase     BigInt          @default(0)
+  participantCount    Int             @default(0)
+  protocolFeesBase    BigInt          @default(0)
+  creatorFeesBase     BigInt          @default(0)
+  chainMarketAddress  String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  lockedAt            DateTime?
+  creator             CreatorProfile  @relation(fields: [creatorId], references: [id])
+  options             MarketOption[]
+  positions           Position[]
+  evidence            Evidence[]
+  resolution          Resolution?
+  comments            Comment[]
+  follows             Follow[]
+  snapshots           ProviderSnapshot[]
+  activities          MarketActivity[]
+}
+
+model MarketOption {
+  id                  String     @id @default(cuid())
+  marketId            String
+  label               String
+  optionIndex         Int
+  optionHash          String
+  totalVolumeBase     BigInt     @default(0)
+  market              Market     @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  positions           Position[]
+  resolutionWinnerFor Resolution?
+  @@unique([marketId, optionIndex])
+  @@unique([marketId, optionHash])
+}
+
+model Position {
+  id                String         @id @default(cuid())
+  userId            String
+  marketId          String
+  optionId          String
+  amountBase        BigInt
+  protocolFeeBase   BigInt         @default(0)
+  creatorFeeBase    BigInt         @default(0)
+  status            PositionStatus @default(OPEN)
+  chainPositionAddress String?
+  createdAt         DateTime       @default(now())
+  claimedAt         DateTime?
+  user              User           @relation(fields: [userId], references: [id])
+  market            Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  option            MarketOption   @relation(fields: [optionId], references: [id])
+  claim             Claim?
+  @@index([marketId, status])
+  @@index([userId, status])
+}
+
+model Evidence {
+  id             String   @id @default(cuid())
+  marketId       String
+  policyHash     String
+  evidenceHash   String   @unique
+  bundleJson     Json
+  resolverVersion String
+  generatedAt    DateTime
+  createdAt      DateTime @default(now())
+  market         Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  resolution     Resolution?
+  @@index([marketId, generatedAt])
+}
+
+model Resolution {
+  id                String       @id @default(cuid())
+  marketId          String       @unique
+  evidenceId        String       @unique
+  outcomeOptionId   String
+  resolverAddress   String
+  policyHash        String
+  evidenceHash      String
+  chainTxSignature  String?
+  submittedAt       DateTime     @default(now())
+  finalizedAt       DateTime?
+  market            Market       @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  evidence          Evidence     @relation(fields: [evidenceId], references: [id])
+  outcomeOption     MarketOption @relation(fields: [outcomeOptionId], references: [id])
+}
+
+model Claim {
+  id               String   @id @default(cuid())
+  positionId       String   @unique
+  amountBase       BigInt
+  chainTxSignature String?
+  claimedAt        DateTime @default(now())
+  position         Position @relation(fields: [positionId], references: [id])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  marketId  String
+  body      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  @@index([marketId, createdAt])
+}
+
+model Follow {
+  userId    String
+  marketId  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  @@id([userId, marketId])
+}
+
+model ProviderSnapshot {
+  id          String   @id @default(cuid())
+  marketId    String
+  provider    String
+  entityId    String
+  metric      String
+  valueJson   Json
+  sourceUrl   String
+  observedAt  DateTime
+  verified    Boolean  @default(false)
+  confidence  Int      @default(0)
+  stale       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  market      Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  @@index([marketId, provider, observedAt])
+}
+
+model MarketActivity {
+  id        String   @id @default(cuid())
+  marketId  String
+  userId    String?
+  kind      String
+  payload   Json
+  createdAt DateTime @default(now())
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([marketId, createdAt])
+}

@@ -34,6 +34,7 @@ Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/mar
 - No AI winner selection, no simulated live data presented as real, and no private keys in the repository.
 - TypeScript domain package for canonical policy hashing, evidence bundles, deterministic outcome selection, bigint payout math, and lifecycle guards.
 - Dependency-light demo API with provider timeout/fallback behavior and no required secrets.
+- PostgreSQL/Prisma schema contract at `prisma/schema.prisma` covering users, creators, markets, options, positions, evidence, resolutions, claims, comments, follows, provider snapshots, and activity. The demo API remains in-memory until the database runtime is enabled.
 
 ## Architecture direction
 
