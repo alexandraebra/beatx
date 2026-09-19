@@ -15,10 +15,11 @@ Verified path:
 3. Place a base-unit position.
 4. Confirm the first position locks the policy.
 5. Close only after the configured close time.
-6. Reject resolution with a mismatched policy hash.
-7. Submit a deterministic resolution and generate an evidence hash.
-8. Claim the winning position.
-9. Reject a second claim for the same position.
+6. Reject resolution with a mismatched policy hash or unauthorized resolver.
+7. Derive the outcome from deterministic evidence and generate an evidence hash.
+8. Reject an evidence/outcome mismatch.
+9. Claim the winning position only for its owner.
+10. Reject early claims, late positions, and a second claim for the same position.
 
 Latest verified result in this checkout: `PASS`.
 

@@ -25,7 +25,7 @@ npm run e2e:demo
 
 The acceptance evidence is recorded in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md).
 
-Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, and emits an evidence hash.
+Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, derives the winner from the evidence bundle, requires the configured resolver authority header, verifies claim ownership, and emits an evidence hash.
 
 ## What is in the demo
 
@@ -53,7 +53,7 @@ Provider adapters -> normalized observations -> deterministic resolver
 Solana Anchor settlement program (Devnet)
 ```
 
-The production boundary should keep large evidence bundles off-chain. A resolved market stores the policy hash and evidence hash on Solana, while the structured observations, sources, timestamps, and resolver version remain in the API/database. AI may summarize traceable observations but never chooses a winner or controls funds.
+The production boundary should keep large evidence bundles off-chain. A resolved market stores the policy hash and evidence hash on Solana, while the structured observations, sources, timestamps, and resolver version remain in the API/database. AI may summarize traceable observations but never chooses a winner or controls funds. The demo resolver defaults to `demo-resolver`; set `BEATX_RESOLVER_AUTHORITY` outside Git when using a non-demo authority.
 
 ## Environment
 
@@ -65,15 +65,14 @@ Market policy is intended to become immutable after the first position. Settleme
 
 ## Solana and API status
 
-The UI is intentionally runnable without a Solana wallet or backend. Anchor, Rust, PostgreSQL, and a GitHub CLI are not available in the current build environment, so no Devnet program has been deployed from this checkout. The next production slice is the API schema/provider boundary followed by the minimal Anchor lifecycle: initialize, create, lock, place, close, submit resolution, finalize, claim, and cancellation/refund.
+The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` using a temporary toolchain, but Anchor CLI, Solana CLI, PostgreSQL, and GitHub CLI are not available in the current build environment, so no Devnet program has been deployed from this checkout. The remaining production slice is the funded Devnet lifecycle: initialize, create, lock, place, close, submit, finalize, claim, and cancellation/refund.
 
 ## Roadmap
 
-1. Add Prisma/PostgreSQL models for users, creators, markets, policies, positions, evidence, resolutions, claims, comments, follows, snapshots, and activity.
-2. Add provider adapters with timeout, cache, stale-data state, and graceful fallback behavior.
-3. Add the deterministic resolver and evidence bundle hashing.
-4. Compile and deploy the Anchor program in `chains/solana`, then add the Devnet acceptance path with policy mutation, late position, unauthorized resolution, pre-resolution claim, double-claim, and vault reconciliation tests.
-5. Connect wallet adapters and replace demo state with API-backed state.
+1. Activate the Prisma/PostgreSQL runtime behind the existing schema contract.
+2. Add provider cache persistence and additional public adapters.
+3. Compile and deploy the Anchor program in `chains/solana`, then add the funded Devnet acceptance path with policy mutation, late position, unauthorized resolution, pre-resolution claim, double-claim, and vault reconciliation tests.
+4. Connect wallet transaction builders and replace demo position state with API-backed/on-chain state.
 
 ## Credit
 

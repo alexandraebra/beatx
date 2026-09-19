@@ -1,10 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { createEvidenceBundle, assertCanPlacePosition, calculateProRataPayout, policyHash, type MarketState, type ResolutionPolicy } from '../../../packages/core/src/index.js'
+import { createEvidenceBundle, assertCanClaim, assertCanPlacePosition, calculateProRataPayout, policyHash, type MarketState, type ResolutionPolicy } from '../../../packages/core/src/index.js'
 import { collectWithFallback, githubActivityProvider } from '../../../packages/providers/src/index.js'
 
 const port = Number(process.env.PORT ?? 4000)
 const PROTOCOL_FEE_BPS = 100n
 const CREATOR_FEE_BPS = 100n
+const RESOLVER_AUTHORITY = process.env.BEATX_RESOLVER_AUTHORITY ?? 'demo-resolver'
 type DemoPosition = { id: string; wallet: string; optionIndex: number; amountBaseUnits: bigint; claimed: boolean }
 type DemoMarket = MarketState & { question: string; category: string; options: string[]; policy: ResolutionPolicy; participants: Set<string>; positions: DemoPosition[]; policyLocked: boolean; winningOption?: number; protocolFeesBaseUnits: bigint; creatorFeesBaseUnits: bigint }
 
@@ -90,22 +91,25 @@ const server = createServer(async (request, response) => {
       if (!market) return send(response, 404, { error: 'MARKET_NOT_FOUND' })
       if (market.status !== 'CLOSED') return send(response, 409, { error: 'MARKET_NOT_CLOSED' })
       const body = await readJson(request)
-      const outcome = typeof body.outcome === 'string' ? body.outcome : ''
       const submittedPolicyHash = typeof body.policyHash === 'string' ? body.policyHash : ''
-      if (!market.options.includes(outcome) || submittedPolicyHash !== market.policyHash) return send(response, 400, { error: 'INVALID_RESOLUTION_POLICY' })
+      if (submittedPolicyHash !== market.policyHash) return send(response, 400, { error: 'INVALID_RESOLUTION_POLICY' })
+      if (request.headers['x-beatx-resolver'] !== RESOLVER_AUTHORITY) return send(response, 403, { error: 'UNAUTHORIZED_RESOLVER' })
       const provider = await collectWithFallback(githubActivityProvider, 'solana-labs/solana')
       const bundle = await createEvidenceBundle(market.id, market.policy, provider.observations)
-      market.winningOption = market.options.indexOf(outcome)
+      if (typeof body.outcome === 'string' && body.outcome !== bundle.outcome) return send(response, 400, { error: 'OUTCOME_NOT_SUPPORTED_BY_EVIDENCE' })
+      market.winningOption = market.options.indexOf(bundle.outcome)
       market.status = 'RESOLVED'
-      return send(response, 200, { data: { ...publicMarket(market), outcome, evidenceHash: bundle.evidenceHash, providerHealth: provider.health, resolver: bundle.resolverVersion } })
+      return send(response, 200, { data: { ...publicMarket(market), outcome: bundle.outcome, evidenceHash: bundle.evidenceHash, providerHealth: provider.health, resolver: bundle.resolverVersion, resolverAuthority: RESOLVER_AUTHORITY } })
     }
     if (request.method === 'POST' && path.match(/^\/api\/markets\/[^/]+\/claim$/)) {
       const market = getMarket(path)
       if (!market) return send(response, 404, { error: 'MARKET_NOT_FOUND' })
-      if (market.status !== 'RESOLVED' || market.winningOption === undefined) return send(response, 409, { error: 'RESOLUTION_NOT_FINAL' })
       const body = await readJson(request)
       const position = market.positions.find((item) => item.id === body.positionId)
       if (!position) return send(response, 404, { error: 'POSITION_NOT_FOUND' })
+      if (typeof body.wallet !== 'string' || body.wallet !== position.wallet) return send(response, 403, { error: 'POSITION_OWNER_REQUIRED' })
+      try { assertCanClaim(market) } catch (error) { return send(response, 409, { error: error instanceof Error ? error.message : 'RESOLUTION_NOT_FINAL' }) }
+      if (market.winningOption === undefined) return send(response, 409, { error: 'RESOLUTION_NOT_FINAL' })
       if (position.claimed) return send(response, 409, { error: 'DOUBLE_CLAIM' })
       position.claimed = true
       if (position.optionIndex !== market.winningOption) return send(response, 200, { data: { positionId: position.id, payoutBaseUnits: 0n, winning: false, claimed: true } })
