@@ -1,6 +1,6 @@
 import type { Observation } from '../../core/src/index.js'
 
-export type ProviderHealth = { provider: string; healthy: boolean; stale: boolean; checkedAt: string; error?: string }
+export type ProviderHealth = { provider: string; healthy: boolean; stale: boolean; checkedAt: string; cachedAt?: string; error?: string }
 
 export type ProviderAdapter = {
   name: string
@@ -14,21 +14,33 @@ export const demoObservations = (entityId: string): Observation[] => [{
   source: 'BeatX Demo Dataset',
   sourceType: 'demo',
   sourceUrl: 'https://example.com/beatx-demo',
-  observedAt: new Date().toISOString(),
+  observedAt: '1970-01-01T00:00:00.000Z',
   verified: false,
   confidence: 0,
 }]
 
+const providerCache = new Map<string, { observations: Observation[]; cachedAt: string }>()
+
+export function clearProviderCache(): void {
+  providerCache.clear()
+}
+
 export async function collectWithFallback(adapter: ProviderAdapter, entityId: string): Promise<{ observations: Observation[]; health: ProviderHealth }> {
   const checkedAt = new Date().toISOString()
+  const cacheKey = `${adapter.name}:${entityId}`
   try {
     const observations = await Promise.race([
       adapter.collect(entityId),
       new Promise<Observation[]>((_, reject) => setTimeout(() => reject(new Error('PROVIDER_TIMEOUT')), 4500)),
     ])
-    return { observations, health: { provider: adapter.name, healthy: true, stale: false, checkedAt } }
+    const cachedAt = new Date().toISOString()
+    providerCache.set(cacheKey, { observations, cachedAt })
+    return { observations, health: { provider: adapter.name, healthy: true, stale: false, checkedAt, cachedAt } }
   } catch (error) {
-    return { observations: demoObservations(entityId), health: { provider: adapter.name, healthy: false, stale: true, checkedAt, error: error instanceof Error ? error.message : 'PROVIDER_ERROR' } }
+    const cached = providerCache.get(cacheKey)
+    const providerError = error instanceof Error ? error.message : 'PROVIDER_ERROR'
+    if (cached) return { observations: cached.observations, health: { provider: adapter.name, healthy: false, stale: true, checkedAt, cachedAt: cached.cachedAt, error: providerError } }
+    return { observations: demoObservations(entityId), health: { provider: adapter.name, healthy: false, stale: true, checkedAt, error: providerError } }
   }
 }
 

@@ -28,7 +28,7 @@ The provider step is intentionally failure-tolerant. When the public GitHub requ
 ## Additional checks
 
 - `npm run typecheck`: PASS.
-- `npm test`: PASS, 6 tests.
+- `npm test`: PASS, 8 tests, including cached stale-provider fallback behavior.
 - Frontend production build: PASS in an executable temporary verification directory; the workspace mount itself does not allow esbuild execution.
 - Anchor program `cargo check`: PASS using a temporary Rust toolchain and executable target directory outside the workspace mount; Anchor CLI/Solana CLI deployment checks remain pending.
 - Secret/path scan: PASS; no GitHub token, private key, wallet seed, or local machine path is committed.
