@@ -22,3 +22,11 @@ jobs:
       - run: npm test
       - run: npm run e2e:demo
       - run: npm run build
+
+  solana:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check Anchor program Rust workspace
+        run: cargo check --manifest-path chains/solana/programs/beatx/Cargo.toml
