@@ -19,7 +19,10 @@ Useful checks:
 npm run typecheck
 npm test
 npm run build
+npm run api:build
 ```
+
+Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `/api/policies/hash`, `/api/providers/github`, and `/api/resolution/demo`. Provider failures return a stale deterministic fallback instead of taking down the product.
 
 ## What is in the demo
 
@@ -28,6 +31,8 @@ npm run build
 - Wallet states, position selection, amount entry, connect/confirm feedback, creator market draft flow, share feedback, and neutral intelligence copy.
 - Explicit separation between BeatX Intelligence, Creator Take, and market source labels.
 - No AI winner selection, no simulated live data presented as real, and no private keys in the repository.
+- TypeScript domain package for canonical policy hashing, evidence bundles, deterministic outcome selection, bigint payout math, and lifecycle guards.
+- Dependency-light demo API with provider timeout/fallback behavior and no required secrets.
 
 ## Architecture direction
 

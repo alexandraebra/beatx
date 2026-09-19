@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "module": "NodeNext", "moduleResolution": "NodeNext", "outDir": ".api-dist", "noEmit": false, "declaration": false },
+  "include": ["apps/api/src/**/*.ts", "packages/**/*.ts"]
+}
