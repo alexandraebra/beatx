@@ -21,6 +21,8 @@ async function request(path, options = {}) {
 try {
   await waitForApi()
   const closeAt = new Date(Date.now() + 250).toISOString()
+  const invalidDeadline = await request('/api/markets', { method: 'POST', body: JSON.stringify({ question: 'This deadline is invalid for acceptance?', options: ['Alpha', 'Beta'], closeAt, resolutionDeadline: new Date(Date.now() + 100).toISOString() }) })
+  assert.equal(invalidDeadline.status, 400)
   const created = await request('/api/markets', { method: 'POST', body: JSON.stringify({ question: 'Which release lands first in this acceptance test?', category: 'Technology', options: ['Alpha', 'Beta'], closeAt, resolutionDeadline: new Date(Date.now() + 10000).toISOString(), rule: 'First verified changelog entry', sources: ['https://example.com'] }) })
   assert.equal(created.status, 201)
   const market = created.body.data

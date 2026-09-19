@@ -66,6 +66,7 @@ const server = createServer(async (request, response) => {
       if (question.length < 12 || options.length < 2 || options.length > 8) return send(response, 400, { error: 'INVALID_MARKET_INPUT' })
       const policy: ResolutionPolicy = { marketType: body.marketType === 'YES_NO' ? 'YES_NO' : 'MULTIPLE_CHOICE', question, options, closeAt: typeof body.closeAt === 'string' ? body.closeAt : new Date(Date.now() + 86400000).toISOString(), resolutionDeadline: typeof body.resolutionDeadline === 'string' ? body.resolutionDeadline : new Date(Date.now() + 172800000).toISOString(), rule: typeof body.rule === 'string' && body.rule ? body.rule : 'Highest verified confidence wins', sources: Array.isArray(body.sources) ? body.sources.filter((item): item is string => typeof item === 'string') : ['github-public'] }
       if (!Number.isFinite(Date.parse(policy.closeAt)) || Date.parse(policy.closeAt) <= Date.now()) return send(response, 400, { error: 'CLOSE_TIME_MUST_BE_IN_FUTURE' })
+      if (!Number.isFinite(Date.parse(policy.resolutionDeadline)) || Date.parse(policy.resolutionDeadline) <= Date.parse(policy.closeAt)) return send(response, 400, { error: 'RESOLUTION_DEADLINE_MUST_FOLLOW_CLOSE' })
       const market: DemoMarket = { id: `market-${markets.length + 1}`, question, category: typeof body.category === 'string' ? body.category : 'Other', options, policy, policyHash: await policyHash(policy), policyLocked: false, status: 'OPEN', openedAt: Date.now(), closeAt: Date.parse(policy.closeAt), vaultBaseUnits: 0n, optionTotalsBaseUnits: options.map(() => 0n), participants: new Set(), positions: [], protocolFeesBaseUnits: 0n, creatorFeesBaseUnits: 0n }
       markets.push(market)
       return send(response, 201, { data: publicMarket(market), message: 'Market created in demo mode. Policy locks at first position.' })
@@ -104,6 +105,7 @@ const server = createServer(async (request, response) => {
       const market = getMarket(path)
       if (!market) return send(response, 404, { error: 'MARKET_NOT_FOUND' })
       if (market.status !== 'CLOSED') return send(response, 409, { error: 'MARKET_NOT_CLOSED' })
+      if (Date.now() > Date.parse(market.policy.resolutionDeadline)) return send(response, 409, { error: 'RESOLUTION_DEADLINE_PASSED' })
       const body = await readJson(request)
       const submittedPolicyHash = typeof body.policyHash === 'string' ? body.policyHash : ''
       if (submittedPolicyHash !== market.policyHash) return send(response, 400, { error: 'INVALID_RESOLUTION_POLICY' })
