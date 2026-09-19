@@ -145,3 +145,5 @@ vite.config.ts.timestamp-*
 .api-dist/
 chains/solana/target/
 chains/solana/.anchor/
+**/wallet.json
+**/*keypair.json

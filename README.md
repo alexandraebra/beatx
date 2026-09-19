@@ -65,13 +65,13 @@ Market policy is intended to become immutable after the first position. Settleme
 
 ## Solana and API status
 
-The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` using a temporary toolchain, but Anchor CLI, Solana CLI, PostgreSQL, and GitHub CLI are not available in the current build environment. A live Devnet RPC check confirms the declared program address is not deployed yet. The remaining production slice is the funded Devnet lifecycle: initialize, create, lock, place, close, submit, finalize, claim, and cancellation/refund.
+The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` and `anchor build` with Anchor 0.31.x. The settlement program is deployed on Devnet at `F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h`, and the funded instruction-level lifecycle is covered by `npm run e2e:solana`. The remaining production slices are cancellation/refund coverage, wallet-signed UI transactions, and the persisted Prisma/PostgreSQL runtime.
 
 ## Roadmap
 
 1. Activate the Prisma/PostgreSQL runtime behind the existing schema contract.
 2. Add provider cache persistence and additional public adapters.
-3. Compile and deploy the Anchor program in `chains/solana`, then add the funded Devnet acceptance path with policy mutation, late position, unauthorized resolution, pre-resolution claim, double-claim, and vault reconciliation tests.
+3. Extend the live Devnet acceptance path with cancellation/refund coverage.
 4. Connect wallet transaction builders and replace demo position state with API-backed/on-chain state.
 
 ## Credit

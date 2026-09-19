@@ -1,15 +1,19 @@
+[toolchain]
+anchor_version = "0.31.1"
+
 [features]
 seeds = true
 skip-lint = false
 
 [programs.devnet]
-beatx = "BWgVLeu6iqGrgz76Mu9VNRRmJpEMBTne8e2e7AAtobKL"
+beatx = "F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "Devnet"
+wallet = "wallet.json"
 
 [scripts]
 test = "anchor test"

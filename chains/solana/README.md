@@ -18,4 +18,6 @@ Implemented instructions:
 
 The program uses an SPL token vault supplied as the settlement asset. Policy fields are written at market creation and there is no mutation instruction. Position placement is bounded by market time, claims require a finalized resolution, the winning payout uses checked `u128` math, and claim/refund accounts are single-use.
 
-The declared Devnet program address is deterministic project metadata, not a deployed program claim. `cargo check` was verified with a temporary Rust toolchain and an executable target directory outside the workspace mount. The Solana CLI and Anchor CLI remain unavailable, so no local-validator test or Devnet deployment has been run. Before deployment, generate and securely manage the matching program keypair outside this repository, run `anchor test`, deploy to Devnet, and record the resulting signature/program address in release evidence.
+The BeatX program is deployed on Solana Devnet at `F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h`. Deployment signature: `MAC9pf4esqeHyB1iwni2e37YzZuwxSvNBfJ88YERHGPgAo3T2BRjKnyaWL7nLRiojG1TT8JiSiHscsdSx8AAH1t`. A live RPC check confirmed the program account is executable and owned by the upgradeable loader. `cargo check` and `anchor build` pass with Anchor 0.31.x. The funded instruction-level acceptance path passes through `npm run e2e:solana`; cancellation/refund remains to be added to that script.
+
+For deployment, keep keypairs outside Git and override the relative config wallet: `anchor deploy --provider.cluster devnet --provider.wallet "$BEATX_WALLET"`.

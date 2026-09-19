@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("BWgVLeu6iqGrgz76Mu9VNRRmJpEMBTne8e2e7AAtobKL");
+declare_id!("F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h");
 
 const MAX_OPTIONS: usize = 8;
 const BPS: u64 = 10_000;
