@@ -38,3 +38,5 @@ The provider step is intentionally failure-tolerant. When the public GitHub requ
 ## Not claimed
 
 This is not a Solana Devnet acceptance report. The Anchor source and workspace are present under `chains/solana`, but `cargo`, `anchor`, and `solana` were unavailable in the build environment. No program deployment, wallet-funded transaction, program ID activation, or on-chain signature is claimed here.
+
+A live Devnet RPC check for the declared program address returned `accountExists: false`; the address is therefore source metadata only until a real deployment is completed.

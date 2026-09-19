@@ -65,7 +65,7 @@ Market policy is intended to become immutable after the first position. Settleme
 
 ## Solana and API status
 
-The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` using a temporary toolchain, but Anchor CLI, Solana CLI, PostgreSQL, and GitHub CLI are not available in the current build environment, so no Devnet program has been deployed from this checkout. The remaining production slice is the funded Devnet lifecycle: initialize, create, lock, place, close, submit, finalize, claim, and cancellation/refund.
+The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` using a temporary toolchain, but Anchor CLI, Solana CLI, PostgreSQL, and GitHub CLI are not available in the current build environment. A live Devnet RPC check confirms the declared program address is not deployed yet. The remaining production slice is the funded Devnet lifecycle: initialize, create, lock, place, close, submit, finalize, claim, and cancellation/refund.
 
 ## Roadmap
 
