@@ -18,7 +18,7 @@ const markets: Market[] = [
 const categories: Category[] = ['All', 'Crypto', 'Technology', 'Games', 'Social', 'Science']
 
 function formatVolume(value: number) { return value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value}` }
-function pct(option: Market['options'][number], all: Market['options']) { return Math.round(option.volume / all.reduce((sum, item) => sum + item.volume, 0) * 100) }
+function pct(option: Market['options'][number], all: Market['options']) { const total = all.reduce((sum, item) => sum + item.volume, 0); return total === 0 ? Math.round(100 / all.length) : Math.round(option.volume / total * 100) }
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000'
 type DraftMarket = { question: string; category: Exclude<Category, 'All'>; options: string[] }
 function toBaseUnits(value: string): string | null {
