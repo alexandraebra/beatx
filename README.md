@@ -69,7 +69,7 @@ The UI is intentionally runnable without a Solana wallet or backend. Anchor, Rus
 1. Add Prisma/PostgreSQL models for users, creators, markets, policies, positions, evidence, resolutions, claims, comments, follows, snapshots, and activity.
 2. Add provider adapters with timeout, cache, stale-data state, and graceful fallback behavior.
 3. Add the deterministic resolver and evidence bundle hashing.
-4. Add the Anchor program and Devnet acceptance path with policy mutation, late position, unauthorized resolution, pre-resolution claim, double-claim, and vault reconciliation tests.
+4. Compile and deploy the Anchor program in `chains/solana`, then add the Devnet acceptance path with policy mutation, late position, unauthorized resolution, pre-resolution claim, double-claim, and vault reconciliation tests.
 5. Connect wallet adapters and replace demo state with API-backed state.
 
 ## Credit

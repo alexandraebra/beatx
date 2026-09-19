@@ -143,3 +143,5 @@ vite.config.ts.timestamp-*
 .vite/
 .ccp
 .api-dist/
+chains/solana/target/
+chains/solana/.anchor/
