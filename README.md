@@ -25,7 +25,7 @@ npm run e2e:demo
 
 The acceptance evidence is recorded in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md).
 
-Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, derives the winner from the evidence bundle, requires the configured resolver authority header, verifies claim ownership, and emits an evidence hash.
+Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `/api/markets/:id/evidence`, `/api/portfolio/:wallet`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, derives the winner from the evidence bundle, requires the configured resolver authority header, verifies claim ownership, and emits an evidence hash.
 
 ## What is in the demo
 
@@ -37,7 +37,7 @@ Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/mar
 - No AI winner selection, no simulated live data presented as real, and no private keys in the repository.
 - TypeScript domain package for canonical policy hashing, evidence bundles, deterministic outcome selection, bigint payout math, and lifecycle guards.
 - Dependency-light demo API with provider timeout, in-memory snapshot cache, stale-data signaling, fallback behavior, and no required secrets.
-- PostgreSQL/Prisma schema contract at `prisma/schema.prisma` covering users, creators, markets, options, positions, evidence, resolutions, claims, comments, follows, provider snapshots, and activity. The demo API remains in-memory until the database runtime is enabled.
+- PostgreSQL/Prisma schema contract at `prisma/schema.prisma` covering users, creators, markets, immutable `MarketPolicy`, options, positions, evidence, resolutions, claims, comments, follows, provider snapshots, and activity. The demo API remains in-memory until the database runtime is enabled.
 
 ## Architecture direction
 

@@ -62,10 +62,7 @@ model Market {
   status              MarketStatus    @default(DRAFT)
   openAt              DateTime
   closeAt             DateTime
-  resolutionDeadline  DateTime
   settlementAsset     String
-  policyHash          String          @unique
-  policyJson          Json
   totalVolumeBase     BigInt          @default(0)
   participantCount    Int             @default(0)
   protocolFeesBase    BigInt          @default(0)
@@ -75,6 +72,7 @@ model Market {
   updatedAt           DateTime        @updatedAt
   lockedAt            DateTime?
   creator             CreatorProfile  @relation(fields: [creatorId], references: [id])
+  policy              MarketPolicy?
   options             MarketOption[]
   positions           Position[]
   evidence            Evidence[]
@@ -83,6 +81,25 @@ model Market {
   follows             Follow[]
   snapshots           ProviderSnapshot[]
   activities          MarketActivity[]
+}
+
+model MarketPolicy {
+  id                   String   @id @default(cuid())
+  marketId             String   @unique
+  marketType           String
+  entityType           String?
+  rule                 String
+  sources              Json
+  resolutionDeadline   DateTime
+  settlementAsset      String
+  creatorCommentary    String?
+  intelligenceConfig   Json?
+  policyHash           String   @unique
+  policyJson           Json
+  lockedAt             DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  market               Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
 }
 
 model MarketOption {

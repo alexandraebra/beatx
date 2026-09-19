@@ -1,13 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createEvidenceBundle, assertCanClaim, assertCanPlacePosition, calculateProRataPayout, policyHash, type MarketState, type ResolutionPolicy } from '../../../packages/core/src/index.js'
-import { collectWithFallback, githubActivityProvider } from '../../../packages/providers/src/index.js'
+import { collectWithFallback, githubActivityProvider, type ProviderHealth } from '../../../packages/providers/src/index.js'
 
 const port = Number(process.env.PORT ?? 4000)
 const PROTOCOL_FEE_BPS = 100n
 const CREATOR_FEE_BPS = 100n
 const RESOLVER_AUTHORITY = process.env.BEATX_RESOLVER_AUTHORITY ?? 'demo-resolver'
-type DemoPosition = { id: string; wallet: string; optionIndex: number; amountBaseUnits: bigint; claimed: boolean }
-type DemoMarket = MarketState & { question: string; category: string; options: string[]; policy: ResolutionPolicy; participants: Set<string>; positions: DemoPosition[]; policyLocked: boolean; winningOption?: number; protocolFeesBaseUnits: bigint; creatorFeesBaseUnits: bigint }
+type DemoPosition = { id: string; wallet: string; optionIndex: number; amountBaseUnits: bigint; claimed: boolean; payoutBaseUnits?: bigint }
+type DemoMarket = MarketState & { question: string; category: string; options: string[]; policy: ResolutionPolicy; participants: Set<string>; positions: DemoPosition[]; policyLocked: boolean; winningOption?: number; evidenceBundle?: Awaited<ReturnType<typeof createEvidenceBundle>>; providerHealth?: ProviderHealth; protocolFeesBaseUnits: bigint; creatorFeesBaseUnits: bigint }
 
 const seedPolicy = (question: string, options: string[]): ResolutionPolicy => ({ marketType: 'MULTIPLE_CHOICE', question, options, closeAt: new Date(Date.now() + 86400000 * 2).toISOString(), resolutionDeadline: new Date(Date.now() + 86400000 * 3).toISOString(), rule: 'Highest verified confidence wins', sources: ['github-public'] })
 const markets: DemoMarket[] = []
@@ -31,7 +31,8 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
   const raw = Buffer.concat(chunks).toString()
   return raw ? JSON.parse(raw) as Record<string, unknown> : {}
 }
-function publicMarket(market: DemoMarket) { return { id: market.id, question: market.question, category: market.category, options: market.options, status: market.status, policyHash: market.policyHash, policyLocked: market.policyLocked, closeAt: new Date(market.closeAt).toISOString(), vaultBaseUnits: market.vaultBaseUnits, optionTotalsBaseUnits: market.optionTotalsBaseUnits, participants: market.participants.size, protocolFeesBaseUnits: market.protocolFeesBaseUnits, creatorFeesBaseUnits: market.creatorFeesBaseUnits, winningOption: market.winningOption === undefined ? null : market.options[market.winningOption], demo: true } }
+function publicMarket(market: DemoMarket) { return { id: market.id, question: market.question, category: market.category, options: market.options, status: market.status, policyHash: market.policyHash, policyLocked: market.policyLocked, closeAt: new Date(market.closeAt).toISOString(), vaultBaseUnits: market.vaultBaseUnits, optionTotalsBaseUnits: market.optionTotalsBaseUnits, participants: market.participants.size, protocolFeesBaseUnits: market.protocolFeesBaseUnits, creatorFeesBaseUnits: market.creatorFeesBaseUnits, winningOption: market.winningOption === undefined ? null : market.options[market.winningOption], evidenceHash: market.evidenceBundle?.evidenceHash ?? null, providerHealth: market.providerHealth ?? null, demo: true } }
+function publicPosition(market: DemoMarket, position: DemoPosition) { return { id: position.id, marketId: market.id, option: market.options[position.optionIndex], optionIndex: position.optionIndex, wallet: position.wallet, amountBaseUnits: position.amountBaseUnits, claimed: position.claimed, payoutBaseUnits: position.payoutBaseUnits ?? 0n, status: market.status === 'RESOLVED' ? (position.optionIndex === market.winningOption ? 'WON' : 'LOST') : market.status } }
 function getMarket(path: string) { return markets.find((item) => item.id === path.split('/')[3]) }
 
 const server = createServer(async (request, response) => {
@@ -41,6 +42,19 @@ const server = createServer(async (request, response) => {
     if (request.method === 'OPTIONS') return send(response, 204, {})
     if (request.method === 'GET' && path === '/health') return send(response, 200, { ok: true, service: 'beatx-api', mode: 'demo' })
     if (request.method === 'GET' && path === '/api/markets') return send(response, 200, { data: markets.map(publicMarket), demo: true })
+    if (request.method === 'GET' && path.startsWith('/api/portfolio/')) {
+      const wallet = decodeURIComponent(path.split('/')[3] ?? '')
+      if (!wallet) return send(response, 400, { error: 'WALLET_REQUIRED' })
+      const positions = markets.flatMap((market) => market.positions.filter((position) => position.wallet === wallet).map((position) => publicPosition(market, position)))
+      const claimableBaseUnits = positions.reduce((sum, position) => sum + (position.status === 'WON' && !position.claimed ? BigInt(position.payoutBaseUnits) : 0n), 0n)
+      return send(response, 200, { data: { wallet, positions, claimableBaseUnits }, demo: true })
+    }
+    if (request.method === 'GET' && path.match(/^\/api\/markets\/[^/]+\/evidence$/)) {
+      const market = getMarket(path)
+      if (!market) return send(response, 404, { error: 'MARKET_NOT_FOUND' })
+      if (!market.evidenceBundle) return send(response, 409, { error: 'EVIDENCE_NOT_AVAILABLE' })
+      return send(response, 200, { data: market.evidenceBundle, health: market.providerHealth, demo: true })
+    }
     if (request.method === 'GET' && path.startsWith('/api/markets/')) {
       const market = getMarket(path)
       return market ? send(response, 200, { data: publicMarket(market) }) : send(response, 404, { error: 'MARKET_NOT_FOUND' })
@@ -97,6 +111,8 @@ const server = createServer(async (request, response) => {
       const provider = await collectWithFallback(githubActivityProvider, 'solana-labs/solana')
       const bundle = await createEvidenceBundle(market.id, market.policy, provider.observations)
       if (typeof body.outcome === 'string' && body.outcome !== bundle.outcome) return send(response, 400, { error: 'OUTCOME_NOT_SUPPORTED_BY_EVIDENCE' })
+      market.evidenceBundle = bundle
+      market.providerHealth = provider.health
       market.winningOption = market.options.indexOf(bundle.outcome)
       market.status = 'RESOLVED'
       return send(response, 200, { data: { ...publicMarket(market), outcome: bundle.outcome, evidenceHash: bundle.evidenceHash, providerHealth: provider.health, resolver: bundle.resolverVersion, resolverAuthority: RESOLVER_AUTHORITY } })
@@ -112,9 +128,10 @@ const server = createServer(async (request, response) => {
       if (market.winningOption === undefined) return send(response, 409, { error: 'RESOLUTION_NOT_FINAL' })
       if (position.claimed) return send(response, 409, { error: 'DOUBLE_CLAIM' })
       position.claimed = true
-      if (position.optionIndex !== market.winningOption) return send(response, 200, { data: { positionId: position.id, payoutBaseUnits: 0n, winning: false, claimed: true } })
+      if (position.optionIndex !== market.winningOption) { position.payoutBaseUnits = 0n; return send(response, 200, { data: { positionId: position.id, payoutBaseUnits: 0n, winning: false, claimed: true } }) }
       const winningPool = market.optionTotalsBaseUnits[market.winningOption]
       const payout = calculateProRataPayout(position.amountBaseUnits, winningPool, market.vaultBaseUnits)
+      position.payoutBaseUnits = payout
       return send(response, 200, { data: { positionId: position.id, payoutBaseUnits: payout, winning: true, claimed: true, protocolFeesBaseUnits: market.protocolFeesBaseUnits, creatorFeesBaseUnits: market.creatorFeesBaseUnits } })
     }
     if (request.method === 'POST' && path === '/api/policies/hash') return send(response, 200, { policyHash: await policyHash(await readJson(request) as ResolutionPolicy) })

@@ -26,7 +26,7 @@ The resolver should accept a structured policy hash and only submit a result if 
 
 ## Demo to production seam
 
-The current demo stores no user or market state remotely. `src/main.tsx` contains seeded example markets and deterministic UI state so the product remains useful without an API key. The public seam is the market shape (`question`, `options`, `volume`, `participants`, source metadata) and the integer settlement preview. A future API can replace these seeded reads without changing the market-room layout.
+The current demo stores no user or market state remotely. `src/main.tsx` contains seeded example markets and deterministic UI state so the product remains useful without an API key. The public seam is the market shape (`question`, `options`, `volume`, `participants`, source metadata) and the integer settlement preview. The Prisma contract separates immutable `MarketPolicy` data from mutable market activity; a future API can replace these seeded reads without changing the market-room layout.
 
 ## Recommended Solana accounts
 

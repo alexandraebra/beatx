@@ -18,8 +18,10 @@ Verified path:
 6. Reject resolution with a mismatched policy hash or unauthorized resolver.
 7. Derive the outcome from deterministic evidence and generate an evidence hash.
 8. Reject an evidence/outcome mismatch.
-9. Claim the winning position only for its owner.
-10. Reject early claims, late positions, and a second claim for the same position.
+9. Read the persisted evidence bundle through the evidence endpoint.
+10. Claim the winning position only for its owner.
+11. Reconcile the winning position through the portfolio endpoint.
+12. Reject early claims, late positions, and a second claim for the same position.
 
 Latest verified result in this checkout: `PASS`.
 
