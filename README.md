@@ -29,6 +29,7 @@ Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/mar
 - Dark-first responsive landing page with trending markets, category filters, live activity, creator spotlight, and a market-room workflow.
 - Deterministic market distributions and integer-safe payout preview; the UI uses a stablecoin concept labeled `USDC (test)` and `Solana Devnet`.
 - Wallet states, position selection, amount entry, connect/confirm feedback, creator market draft flow, share feedback, and neutral intelligence copy.
+- Wallet button uses an injected Solana provider when available and clearly falls back to a no-funds demo wallet when no extension is installed.
 - Explicit separation between BeatX Intelligence, Creator Take, and market source labels.
 - No AI winner selection, no simulated live data presented as real, and no private keys in the repository.
 - TypeScript domain package for canonical policy hashing, evidence bundles, deterministic outcome selection, bigint payout math, and lifecycle guards.
