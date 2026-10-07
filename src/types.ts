@@ -1,5 +1,7 @@
 export type Category = 'All' | 'Crypto' | 'Technology' | 'Games' | 'Social' | 'Science'
 
+export type MarketStatus = 'OPEN' | 'LOCKED' | 'CLOSED' | 'RESOLVED'
+
 export interface MarketOption {
   label: string
   volume: number
@@ -12,7 +14,6 @@ export interface Market {
   description?: string
   category: Exclude<Category, 'All'>
   creator: string
-  creatorAddress?: string
   initials: string
   accent: string
   ends: string
@@ -20,11 +21,12 @@ export interface Market {
   participants: number
   options: MarketOption[]
   featured?: boolean
-  status?: 'OPEN' | 'LOCKED' | 'CLOSED' | 'RESOLVED'
+  status?: MarketStatus
   closeAt?: string
   resolutionDeadline?: string
   policyHash?: string
   chainMarketAddress?: string
+  creatorAddress?: string
 }
 
 export interface Position {
@@ -32,10 +34,9 @@ export interface Position {
   marketId: string
   userAddress: string
   optionIndex: number
-  amountBase: string // BigInt as string
+  amountBase: string
   status: 'OPEN' | 'WON' | 'LOST' | 'REFUNDED'
   createdAt: string
-  claimedAt?: string
   payoutBaseUnits?: string
 }
 

@@ -1,10 +1,10 @@
-import type { PublicKey, Transaction } from '@solana/web3.js'
-import { Connection, LAMPORTS_PER_SOL, SystemProgram, clusterApiUrl } from '@solana/web3.js'
+import { Connection, LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js'
 
-export interface SolanaProvider {
+export type SolanaProvider = {
   publicKey?: { toString(): string }
-  isConnected?: boolean
   isPhantom?: boolean
+  isSolflare?: boolean
+  isBackpack?: boolean
   connect?: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>
   disconnect?: () => Promise<void>
   signTransaction?: (transaction: Transaction) => Promise<Transaction>
@@ -12,153 +12,96 @@ export interface SolanaProvider {
   signMessage?: (message: Uint8Array) => Promise<{ signature: Uint8Array; publicKey: string }>
 }
 
-export interface WalletState {
+export type WalletState = {
   address: string | null
   isConnected: boolean
   network: 'devnet' | 'mainnet' | 'unknown'
-  balance: number // in SOL
+  balance: number
   source: 'phantom' | 'solflare' | 'backpack' | 'demo'
   error: string | null
 }
 
-export interface WalletContextType {
-  state: WalletState
-  connect: () => Promise<void>
-  disconnect: () => Promise<void>
-  sendTransaction: (transaction: Transaction) => Promise<string>
-}
+const RPC_URL =
+  import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com'
+const NETWORK = (
+  import.meta.env.VITE_SOLANA_NETWORK || 'devnet'
+) as 'devnet' | 'mainnet'
 
-const RPC_URL = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com'
-const NETWORK = (import.meta.env.VITE_SOLANA_NETWORK || 'devnet') as 'devnet' | 'mainnet'
+let cachedConnection: Connection | null = null
 
-let connection: Connection | null = null
-
-function getConnection(): Connection {
-  if (!connection) {
-    connection = new Connection(RPC_URL, 'confirmed')
+function getConnection() {
+  if (!cachedConnection) {
+    cachedConnection = new Connection(RPC_URL, 'confirmed')
   }
-  return connection
+  return cachedConnection
 }
 
-async function getNetworkFromProvider(provider: SolanaProvider): Promise<'devnet' | 'unknown'> {
-  try {
-    const conn = getConnection()
-    const genesisHash = await conn.getGenesisHash()
-    // Devnet genesis hash
-    if (genesisHash === 'EtWTRABZaYq6iMfeYKUbQVHexX1G24cxupn2ruVKZYQ') {
-      return 'devnet'
-    }
-  } catch {
-    // Silently handle connection errors
-  }
-  return 'unknown'
+function detectProvider(): SolanaProvider | null {
+  const provider =
+    (globalThis as any)?.solana ||
+    (globalThis as any)?.phantom?.solana ||
+    (globalThis as any)?.solflare?.solana ||
+    (globalThis as any)?.backpack?.solana
+  if (provider) return provider
+  return null
 }
 
-async function fetchBalance(address: string): Promise<number> {
+function getSource(provider: SolanaProvider | null): WalletState['source'] {
+  if (!provider) return 'demo'
+  if (provider.isPhantom) return 'phantom'
+  if (provider.isSolflare) return 'solflare'
+  if (provider.isBackpack) return 'backpack'
+  return 'demo'
+}
+
+async function fetchBalance(address: string) {
   try {
-    const conn = getConnection()
-    const pubkey = new (await import('@solana/web3.js')).PublicKey(address)
-    const balance = await conn.getBalance(pubkey)
+    const pubkey = new PublicKey(address)
+    const balance = await getConnection().getBalance(pubkey)
     return balance / LAMPORTS_PER_SOL
   } catch {
     return 0
   }
 }
 
-function detectProviderSource(): SolanaProvider | null {
-  const phantom = (globalThis as any)?.phantom?.solana
-  const solflare = (globalThis as any)?.solflare?.solana || (globalThis as any)?.solflare
-  const backpack = (globalThis as any)?.backpack?.solana
-
-  // Phantom has highest priority
-  if (phantom?.isPhantom) return phantom
-  if (solflare?.isSolflare) return solflare
-  if (backpack?.isBackpack) return backpack
-
-  // Fallback generic solana provider
-  const solana = (globalThis as any)?.solana
-  if (solana) return solana
-
-  return null
-}
-
-function getProviderName(provider: SolanaProvider | null): 'phantom' | 'solflare' | 'backpack' | 'demo' {
-  if (!provider) return 'demo'
-  if ((provider as any).isPhantom) return 'phantom'
-  if ((provider as any).isSolflare) return 'solflare'
-  if ((provider as any).isBackpack) return 'backpack'
-  return 'demo'
+async function determineNetwork() {
+  try {
+    const hash = await getConnection().getGenesisHash()
+    if (hash === 'EtWTRABZaYq6iMfeYKUbQVHexX1G24cxupn2ruVKZYQ') return 'devnet'
+    return 'mainnet'
+  } catch {
+    return 'unknown'
+  }
 }
 
 export async function connectSolanaWallet(): Promise<WalletState> {
-  try {
-    const provider = detectProviderSource()
+  const provider = detectProvider()
 
-    if (!provider) {
-      // Demo wallet fallback
-      return {
-        address: 'demo-wallet-' + Math.random().toString(36).substring(7),
-        isConnected: true,
-        network: 'devnet',
-        balance: 100, // Mock balance
-        source: 'demo',
-        error: null,
-      }
-    }
-
-    // Connect to provider
-    if (provider.connect) {
-      try {
-        const result = await provider.connect()
-        const address = result.publicKey.toString()
-        const network = await getNetworkFromProvider(provider)
-        const balance = await fetchBalance(address)
-        const source = getProviderName(provider)
-
-        return {
-          address,
-          isConnected: true,
-          network,
-          balance,
-          source,
-          error: null,
-        }
-      } catch (err: any) {
-        return {
-          address: null,
-          isConnected: false,
-          network: 'unknown',
-          balance: 0,
-          source: getProviderName(provider),
-          error: err?.message || 'Connection failed',
-        }
-      }
-    }
-
-    // If already connected
-    if (provider.publicKey) {
-      const address = provider.publicKey.toString()
-      const network = await getNetworkFromProvider(provider)
-      const balance = await fetchBalance(address)
-      const source = getProviderName(provider)
-
-      return {
-        address,
-        isConnected: true,
-        network,
-        balance,
-        source,
-        error: null,
-      }
-    }
-
+  if (!provider) {
     return {
-      address: null,
-      isConnected: false,
-      network: 'unknown',
-      balance: 0,
-      source: getProviderName(provider),
-      error: 'Provider connected but no public key',
+      address: 'demo-wallet-' + Math.random().toString(36).slice(2, 9),
+      isConnected: true,
+      network: NETWORK,
+      balance: 100,
+      source: 'demo',
+      error: null,
+    }
+  }
+
+  try {
+    const result = await provider.connect?.()
+    if (!result?.publicKey) {
+      throw new Error('Wallet did not return a public key')
+    }
+
+    const address = result.publicKey.toString()
+    return {
+      address,
+      isConnected: true,
+      network: await determineNetwork(),
+      balance: await fetchBalance(address),
+      source: getSource(provider),
+      error: null,
     }
   } catch (error: any) {
     return {
@@ -166,63 +109,39 @@ export async function connectSolanaWallet(): Promise<WalletState> {
       isConnected: false,
       network: 'unknown',
       balance: 0,
-      source: 'demo',
-      error: error?.message || 'Unknown error',
+      source: getSource(provider),
+      error: error?.message || 'Wallet connection failed',
     }
   }
 }
 
 export async function disconnectWallet(): Promise<void> {
-  try {
-    const provider = detectProviderSource()
-    if (provider?.disconnect) {
-      await provider.disconnect()
-    }
-  } catch (error) {
-    console.error('Disconnect error:', error)
-  }
+  const provider = detectProvider()
+  if (provider?.disconnect) await provider.disconnect()
 }
 
-export async function getWalletBalance(address: string): Promise<number> {
+export async function getWalletBalance(address: string) {
   return fetchBalance(address)
 }
 
-export async function sendTransactionViaWallet(
-  transaction: Transaction
-): Promise<string> {
-  try {
-    const provider = detectProviderSource()
+export async function signAndSendTransaction(transaction: Transaction) {
+  const provider = detectProvider()
+  if (!provider?.signTransaction)
+    throw new Error('Wallet does not support signing')
 
-    if (!provider?.signTransaction) {
-      throw new Error('Wallet does not support transaction signing')
-    }
-
-    // Set fee payer if not already set
-    if (!transaction.feePayer && provider.publicKey) {
-      transaction.feePayer = new (await import('@solana/web3.js')).PublicKey(
-        provider.publicKey.toString()
-      )
-    }
-
-    // Get recent blockhash
-    const conn = getConnection()
-    const { blockhash } = await conn.getLatestBlockhash('finalized')
-    transaction.recentBlockhash = blockhash
-
-    // Sign transaction
-    const signedTx = await provider.signTransaction(transaction)
-
-    // Send transaction
-    const signature = await conn.sendRawTransaction(signedTx.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
-    })
-
-    // Wait for confirmation
-    await conn.confirmTransaction(signature, 'confirmed')
-
-    return signature
-  } catch (error: any) {
-    throw new Error(`Transaction failed: ${error?.message || 'Unknown error'}`)
+  const transactionWithFeePayer = transaction
+  if (!transactionWithFeePayer.feePayer && provider.publicKey) {
+    transactionWithFeePayer.feePayer = new PublicKey(
+      provider.publicKey.toString()
+    )
   }
+
+  const conn = getConnection()
+  const { blockhash } = await conn.getLatestBlockhash('finalized')
+  transactionWithFeePayer.recentBlockhash = blockhash
+
+  const signed = await provider.signTransaction(transactionWithFeePayer)
+  return conn.sendRawTransaction(signed.serialize(), {
+    skipPreflight: false,
+  })
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { connectSolanaWallet, disconnectWallet, getWalletBalance, type WalletState } from '../wallet'
 
 export function useWallet() {
@@ -18,10 +18,7 @@ export function useWallet() {
       const result = await connectSolanaWallet()
       setState(result)
     } catch (error: any) {
-      setState((prev) => ({
-        ...prev,
-        error: error?.message || 'Connection failed',
-      }))
+      setState((prev) => ({ ...prev, error: error?.message || 'Connection failed' }))
     } finally {
       setIsLoading(false)
     }
@@ -39,41 +36,27 @@ export function useWallet() {
         source: 'demo',
         error: null,
       })
-    } catch (error: any) {
-      setState((prev) => ({
-        ...prev,
-        error: error?.message || 'Disconnect failed',
-      }))
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   const refreshBalance = useCallback(async () => {
-    if (state.address && state.isConnected) {
-      try {
-        const balance = await getWalletBalance(state.address)
-        setState((prev) => ({ ...prev, balance }))
-      } catch (error) {
-        console.error('Balance refresh error:', error)
-      }
+    if (!state.address) return
+    try {
+      const balance = await getWalletBalance(state.address)
+      setState((prev) => ({ ...prev, balance }))
+    } catch (error) {
+      console.error('Balance refresh error:', error)
     }
-  }, [state.address, state.isConnected])
+  }, [state.address])
 
-  // Auto-refresh balance on connection
   useEffect(() => {
-    if (state.isConnected && state.address) {
-      refreshBalance()
-      const interval = setInterval(refreshBalance, 30000) // Refresh every 30s
-      return () => clearInterval(interval)
-    }
-  }, [state.isConnected, state.address, refreshBalance])
+    if (!state.address || !state.isConnected) return
+    refreshBalance()
+    const timer = setInterval(refreshBalance, 30000)
+    return () => clearInterval(timer)
+  }, [state.address, state.isConnected, refreshBalance])
 
-  return {
-    ...state,
-    connect,
-    disconnect,
-    refreshBalance,
-    isLoading,
-  }
+  return { ...state, isLoading, connect, disconnect, refreshBalance }
 }
