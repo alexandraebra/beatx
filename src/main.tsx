@@ -1,26 +1,49 @@
-import { StrictMode, useMemo, useState } from 'react'
+import { StrictMode, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowUpRight, BarChart3, Bell, ChevronDown, CircleHelp, Clock3, Compass, ExternalLink, FileCheck2, Flame, Globe2, Heart, Layers3, Menu, Plus, Search, ShieldCheck, Sparkles, Trophy, Wallet, X, Zap } from 'lucide-react'
-import { connectSolanaWallet } from './wallet'
+import { Compass, Flame, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
+import { useWallet } from './hooks/useWallet'
+import { useApi } from './hooks/useApi'
 import './styles.css'
 
 type Category = 'All' | 'Crypto' | 'Technology' | 'Games' | 'Social' | 'Science'
-type Market = { id: string; question: string; category: Exclude<Category, 'All'>; creator: string; initials: string; accent: string; ends: string; volume: number; participants: number; featured?: boolean; options: { label: string; volume: number; color: string }[]; source: string; sourceDate: string; take: string }
+type Market = {
+  id: string
+  question: string
+  category: Exclude<Category, 'All'>
+  creator: string
+  initials: string
+  accent: string
+  ends: string
+  volume: number
+  participants: number
+  featured?: boolean
+  options: { label: string; volume: number }[]
+  status?: 'OPEN' | 'LOCKED' | 'CLOSED' | 'RESOLVED'
+  closeAt?: string
+  description?: string
+  creatorAddress?: string
+  policyHash?: string
+}
 
-const markets: Market[] = [
-  { id: 'market-cap', question: 'Which project reaches $10M market cap first?', category: 'Crypto', creator: 'Mira Chen', initials: 'MC', accent: '#b6ff61', ends: '2d 14h', volume: 39020, participants: 842, featured: true, options: [{ label: 'Monad', volume: 18420, color: '#b6ff61' }, { label: 'Sui', volume: 12680, color: '#9c86ff' }, { label: 'Berachain', volume: 7920, color: '#ff9d67' }], source: 'DexScreener + project docs', sourceDate: 'Updated 8 min ago', take: 'Creator thesis: liquidity and developer velocity will decide the race.' },
-  { id: 'hackathon', question: 'Which team wins the next Solana hackathon?', category: 'Technology', creator: 'Alex Rivera', initials: 'AR', accent: '#7dd3fc', ends: '5d 03h', volume: 24780, participants: 391, options: [{ label: 'Team Northstar', volume: 11840, color: '#7dd3fc' }, { label: 'Orbit Labs', volume: 8240, color: '#c4b5fd' }, { label: 'Signal House', volume: 4700, color: '#fb923c' }], source: 'Hackathon public shortlist', sourceDate: 'Updated 1h ago', take: 'Creator thesis: the strongest demo loop usually wins the room.' },
-  { id: 'sol-threshold', question: 'Will SOL break $220 before the monthly close?', category: 'Crypto', creator: 'Nadia Park', initials: 'NP', accent: '#fbbf24', ends: '9d 06h', volume: 18640, participants: 275, options: [{ label: 'Yes', volume: 11180, color: '#fbbf24' }, { label: 'No', volume: 7460, color: '#64748b' }], source: 'CoinGecko public market data', sourceDate: 'Updated 12 min ago', take: 'Creator thesis: volatility is compressing, but the catalyst calendar is full.' },
-  { id: 'launch-date', question: 'Will Atlas release its public beta before October 15?', category: 'Games', creator: 'Owen Brooks', initials: 'OB', accent: '#f472b6', ends: '12d 11h', volume: 9210, participants: 166, options: [{ label: 'Yes', volume: 5480, color: '#f472b6' }, { label: 'No', volume: 3730, color: '#475569' }], source: 'Atlas changelog + GitHub', sourceDate: 'Updated 3h ago', take: 'Creator thesis: the public roadmap has moved from intention to cadence.' },
+const marketSeed: Market[] = [
+  { id: 'market-cap', question: 'Which project reaches $10M market cap first?', category: 'Crypto', creator: 'Mira Chen', initials: 'MC', accent: '#b6ff61', ends: '2d 14h', volume: 39020, participants: 140, featured: true, options: [{ label: 'Monad', volume: 42 }, { label: 'Sui', volume: 38 }, { label: 'Berachain', volume: 20 }] },
+  { id: 'hackathon', question: 'Which team wins the next Solana hackathon?', category: 'Technology', creator: 'Alex Rivera', initials: 'AR', accent: '#7dd3fc', ends: '5d 03h', volume: 24780, participants: 96, options: [{ label: 'Monad', volume: 46 }, { label: 'Solana', volume: 34 }, { label: 'Other', volume: 20 }] },
+  { id: 'sol-threshold', question: 'Will SOL break $220 before the monthly close?', category: 'Crypto', creator: 'Nadia Park', initials: 'NP', accent: '#fbbf24', ends: '9d 06h', volume: 18640, participants: 82, options: [{ label: 'Yes', volume: 62 }, { label: 'No', volume: 38 }] },
+  { id: 'launch-date', question: 'Will Atlas release its public beta before October 15?', category: 'Games', creator: 'Owen Brooks', initials: 'OB', accent: '#f472b6', ends: '12d 11h', volume: 9210, participants: 51, options: [{ label: 'Yes', volume: 57 }, { label: 'No', volume: 43 }] },
 ]
 
 const categories: Category[] = ['All', 'Crypto', 'Technology', 'Games', 'Social', 'Science']
 
-function formatVolume(value: number) { return value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value}` }
-function pct(option: Market['options'][number], all: Market['options']) { const total = all.reduce((sum, item) => sum + item.volume, 0); return total === 0 ? Math.round(100 / all.length) : Math.round(option.volume / total * 100) }
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000'
-type DraftMarket = { question: string; category: Exclude<Category, 'All'>; options: string[] }
+function formatVolume(value: number) {
+  return value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value}`
+}
+
+function pct(option: Market['options'][number], all: Market['options']) {
+  const total = all.reduce((sum, item) => sum + item.volume, 0)
+  return total === 0 ? Math.round(100 / all.length) : Math.round((option.volume / total) * 100)
+}
+
 function toBaseUnits(value: string): string | null {
   const normalized = value.trim()
   if (!/^\d+(\.\d{1,6})?$/.test(normalized)) return null
@@ -28,95 +51,479 @@ function toBaseUnits(value: string): string | null {
   const base = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
   return base > 0n ? base.toString() : null
 }
-async function postDemoApi(path: string, body: unknown) {
-  const response = await fetch(`${apiBase}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  if (!response.ok) throw new Error(`API_${response.status}`)
-  return response.json() as Promise<{ data?: Record<string, unknown> }>
+
+type DraftMarket = {
+  question: string
+  category: Exclude<Category, 'All'>
+  description?: string
+  options: string[]
+  closeAtDays?: number
+  resolutionDeadlineDays?: number
 }
 
 function App() {
+  const { address, isConnected, network, balance, connect, disconnect } = useWallet()
+  const { getMarkets, createMarket, placePosition, getPortfolio, claimPayout, closeMarket, resolveMarket } = useApi()
   const [activeCategory, setActiveCategory] = useState<Category>('All')
   const [searchTerm, setSearchTerm] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [marketList, setMarketList] = useState(markets)
-  const [selectedMarket, setSelectedMarket] = useState(markets[0])
+  const [marketList, setMarketList] = useState<Market[]>(marketSeed)
+  const [selectedMarket, setSelectedMarket] = useState<Market>(marketSeed[0])
   const [selectedOption, setSelectedOption] = useState(0)
   const [amount, setAmount] = useState('25')
-  const [connected, setConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showProof, setShowProof] = useState(false)
   const [notice, setNotice] = useState('')
-  const visibleMarkets = useMemo(() => { const term = searchTerm.trim().toLowerCase(); return marketList.filter((market) => (activeCategory === 'All' || market.category === activeCategory) && (!term || `${market.question} ${market.creator} ${market.category}`.toLowerCase().includes(term))) }, [activeCategory, marketList, searchTerm])
+  const [portfolio, setPortfolio] = useState<any[]>([])
 
-  const selectMarket = (market: Market) => { setSelectedMarket(market); setSelectedOption(0); window.scrollTo({ top: 440, behavior: 'smooth' }) }
-  const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 3500) }
-  const handleWallet = async () => { if (connected) { setConnected(false); setWalletAddress(''); notify('Wallet disconnected from this demo') ; return } try { const wallet = await connectSolanaWallet(); setConnected(true); setWalletAddress(wallet.address); notify(wallet.source === 'injected' ? 'Solana wallet connected' : 'Demo wallet connected — no extension detected') } catch { notify('Wallet connection was cancelled') } }
+  const visibleMarkets = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    return marketList.filter((market) => {
+      const matchesCategory = activeCategory === 'All' || market.category === activeCategory
+      const matchesSearch = !term || market.question.toLowerCase().includes(term)
+      return matchesCategory && matchesSearch
+    })
+  }, [activeCategory, searchTerm, marketList])
+
+  const notify = (message: string) => {
+    setNotice(message)
+    window.setTimeout(() => setNotice(''), 3500)
+  }
+
+  const loadMarkets = async () => {
+    try {
+      const data = await getMarkets()
+      if (Array.isArray(data) && data.length > 0) {
+        setMarketList(data as Market[])
+        setSelectedMarket((data as Market[])[0])
+      }
+    } catch {
+      setMarketList(marketSeed)
+    }
+  }
+
+  useEffect(() => { void loadMarkets() }, [])
+
+  const loadPortfolio = async () => {
+    if (!address) return
+    try {
+      const data = await getPortfolio(address)
+      setPortfolio(data.positions || [])
+    } catch {
+      setPortfolio([])
+    }
+  }
+
+  useEffect(() => { void loadPortfolio() }, [address])
+
+  const handleWallet = async () => {
+    if (isConnected && address) {
+      await disconnect()
+      notify('Wallet disconnected')
+      return
+    }
+
+    try {
+      await connect()
+      if (address) notify('Wallet connected successfully')
+    } catch {
+      notify('Wallet could not be connected')
+    }
+  }
+
   const handlePosition = async () => {
-    if (!connected) return void handleWallet()
+    if (!isConnected || !address) {
+      notify('Connect wallet before placing a bet')
+      return
+    }
+
     const amountBaseUnits = toBaseUnits(amount)
-    if (!amountBaseUnits) return notify('Enter an amount between 0.000001 and 1,000,000 USDC (test)')
+    if (!amountBaseUnits) {
+      notify('Enter a valid amount in SOL-style format')
+      return
+    }
+
     try {
-      await postDemoApi(`/api/markets/${selectedMarket.id}/positions`, { optionIndex: selectedOption, amountBaseUnits, wallet: walletAddress })
-      notify(`Position recorded in the BeatX demo API on ${selectedMarket.options[selectedOption].label}`)
-    } catch { notify('Demo API unavailable — no funds or transaction were sent') }
+      await placePosition(selectedMarket.id, selectedOption, amountBaseUnits, address)
+      notify(`Position recorded for ${selectedMarket.options[selectedOption].label}`)
+    } catch (error: any) {
+      notify(error.message || 'Could not place position')
+    }
   }
+
   const handleCreate = async (draft: DraftMarket) => {
-    const localMarket: Market = { id: `local-${Date.now()}`, question: draft.question, category: draft.category, creator: 'You', initials: 'YO', accent: '#b6ff61', ends: '7d', volume: 0, participants: 0, options: draft.options.map((label, index) => ({ label, volume: 0, color: ['#b6ff61', '#9c86ff', '#ff9d67', '#7dd3fc'][index % 4] })), source: 'Resolution policy pending', sourceDate: 'Demo draft', take: 'Creator take will be added before publishing.' }
     try {
-      await postDemoApi('/api/markets', { question: draft.question, category: draft.category, options: draft.options, closeAt: new Date(Date.now() + 7 * 86400000).toISOString(), resolutionDeadline: new Date(Date.now() + 8 * 86400000).toISOString(), rule: 'Highest verified confidence wins', sources: ['github-public'] })
-      notify('Market created in the demo API and policy is ready to review')
-    } catch { notify('API unavailable — market kept as a local demo draft') }
-    setMarketList((current) => [localMarket, ...current])
-    setSelectedMarket(localMarket)
-    setShowCreate(false)
+      const created = await createMarket(draft)
+      const nextMarket: Market = {
+        ...created,
+        question: created.question || draft.question,
+        category: created.category || draft.category,
+        creator: 'You',
+        initials: 'YO',
+        accent: '#b6ff61',
+        ends: '7d',
+        volume: 0,
+        participants: 0,
+        options: created.options || draft.options.map((label) => ({ label, volume: 0 })),
+      }
+      setMarketList((current) => [nextMarket, ...current])
+      setSelectedMarket(nextMarket)
+      setShowCreate(false)
+      notify('Market created successfully')
+    } catch (error: any) {
+      notify(error.message || 'Market could not be created')
+    }
   }
 
-  return <div className="app-shell">
-    <header className="topbar">
-      <a className="brand" href="#top" aria-label="BeatX home"><span className="brand-mark"><span /></span><span>Beat<span className="brand-x">X</span></span></a>
-      <nav className="desktop-nav"><a className="active" href="#explore">Explore</a><button onClick={() => setShowCreate(true)}>Create</button><a href="#live">Live</a><a href="#creators">Creators</a><a href="#portfolio">Portfolio</a></nav>
-      <div className="top-actions">{searchOpen && <input className="search-input" autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} onKeyDown={(event) => event.key === 'Escape' && setSearchOpen(false)} placeholder="Search markets" aria-label="Search markets" />}<button className="icon-button" aria-label="Search" onClick={() => setSearchOpen(!searchOpen)}><Search size={17} /></button><button className="icon-button" aria-label="Notifications"><Bell size={17} /></button><button className={connected ? 'wallet connected' : 'wallet'} onClick={() => void handleWallet()}><Wallet size={16} />{connected ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-3)}` : 'Connect wallet'}</button><button className="mobile-menu" aria-label="Menu"><Menu size={19} /></button></div>
-    </header>
+  const handleCloseMarket = async () => {
+    try {
+      await closeMarket(selectedMarket.id)
+      notify('Market closed')
+    } catch (error: any) {
+      notify(error.message || 'Could not close market')
+    }
+  }
 
-    <main id="top">
-      <section className="hero wrap">
-        <div className="hero-copy"><div className="eyebrow"><span className="pulse-dot" /> LIVE ON SOLANA DEVNET <span className="eyebrow-line" /></div><h1>Predict what<br /><em>happens next.</em></h1><p>Creator-powered prediction markets for the outcomes that move culture, crypto, and everything in between.</p><div className="hero-actions"><button className="primary-button" onClick={() => document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' })}>Explore markets <ArrowUpRight size={17} /></button><button className="text-button" onClick={() => setShowCreate(true)}>Create a market <Plus size={16} /></button></div><div className="hero-proof"><div className="avatar-stack"><span>MC</span><span>AR</span><span>NP</span><span>+1k</span></div><span>1,674 people are making calls today</span></div></div>
-        <div className="hero-orbit"><div className="orbit-ring ring-one" /><div className="orbit-ring ring-two" /><div className="orbit-core"><div className="core-label">LIVE MARKET</div><strong>MONAD</strong><span>47% implied</span><div className="core-spark"><i /><i /><i /><i /><i /><i /><i /></div></div><div className="float-card card-top"><span className="mini-icon green"><Zap size={13} /></span><div><small>Trending now</small><strong>Market cap race</strong></div><ArrowUpRight size={15} /></div><div className="float-card card-bottom"><span className="mini-icon purple"><Trophy size={13} /></span><div><small>New resolution</small><strong>Devnet verified</strong></div><ShieldCheck size={15} /></div></div>
-      </section>
+  const handleResolve = async () => {
+    try {
+      if (!selectedMarket.policyHash) {
+        notify('Policy hash missing')
+        return
+      }
+      await resolveMarket(selectedMarket.id, selectedMarket.policyHash, selectedMarket.options[selectedOption].label)
+      notify('Market resolved')
+    } catch (error: any) {
+      notify(error.message || 'Could not resolve market')
+    }
+  }
 
-      <section className="ticker"><div className="ticker-inner"><span>MARKETS LIVE</span><i /><span className="ticker-item">SOL / $184.22 <b className="up">+3.8%</b></span><span className="ticker-item">BTC / $63,902 <b className="up">+1.2%</b></span><span className="ticker-item">ACTIVE BEATS <b>1,284</b></span><span className="ticker-item">VOLUME <b>$2.4M</b></span><span className="ticker-item">NEXT RESOLUTION <b>04:18:22</b></span></div></section>
+  const handleClaim = async () => {
+    if (!address) {
+      notify('Connect wallet first')
+      return
+    }
 
-      <section className="section wrap" id="explore"><div className="section-heading"><div><div className="section-kicker">DISCOVER THE SIGNAL</div><h2>Trending <em>Beats</em></h2></div><a className="view-all" href="#all-markets">View all markets <ArrowUpRight size={16} /></a></div><div className="category-row">{categories.map((category) => <button key={category} onClick={() => setActiveCategory(category)} className={activeCategory === category ? 'category active' : 'category'}>{category}</button>)}<button className="filter-button"><Layers3 size={15} /> Filters <ChevronDown size={14} /></button></div>{visibleMarkets.length ? <div className="market-grid">{visibleMarkets.map((market, index) => <MarketCard key={market.id} market={market} index={index} onClick={() => selectMarket(market)} />)}</div> : <div className="empty-state"><Search size={17} /><strong>No markets match “{searchTerm}”</strong><span>Try another question, creator, or category.</span><button onClick={() => { setSearchTerm(''); setActiveCategory('All') }}>Clear search</button></div>}</section>
+    try {
+      const matched = portfolio.find((item) => item.marketId === selectedMarket.id)
+      if (!matched) {
+        notify('No claim available')
+        return
+      }
+      await claimPayout(selectedMarket.id, matched.id, address)
+      notify('Payout claimed')
+    } catch (error: any) {
+      notify(error.message || 'Could not claim payout')
+    }
+  }
 
-      <section className="room-section" id="live"><div className="wrap"><div className="section-heading room-heading"><div><div className="section-kicker">THE MARKET ROOM</div><h2>Make your <em>call.</em></h2></div><div className="room-status"><span className="pulse-dot" /> Market is live</div></div><div className="market-room"><div className="room-main"><div className="room-meta"><span className="tag green-tag">{selectedMarket.category}</span><span><Clock3 size={13} /> Ends in {selectedMarket.ends}</span><span><Globe2 size={13} /> Public market</span></div><h3>{selectedMarket.question}</h3><div className="room-creator"><div className="creator-avatar" style={{ background: selectedMarket.accent }}>{selectedMarket.initials}</div><span>Created by <strong>{selectedMarket.creator}</strong></span><button className="follow">Follow</button><button className="share" onClick={() => notify('Market link copied to clipboard')}><ExternalLink size={14} /> Share</button></div><div className="distribution"><div className="distribution-head"><span>Current market distribution</span><span className="neutral-label">Implied probability</span></div><div className="distribution-bar">{selectedMarket.options.map((option) => <div key={option.label} style={{ width: `${pct(option, selectedMarket.options)}%`, background: option.color }} />)}</div><div className="distribution-legend">{selectedMarket.options.map((option) => <div key={option.label}><span className="legend-dot" style={{ background: option.color }} /><span>{option.label}</span><strong>{pct(option, selectedMarket.options)}%</strong></div>)}</div></div><div className="intelligence"><div className="intel-icon"><Sparkles size={17} /></div><div><div className="intel-title">BeatX Intelligence <span>NEUTRAL SUMMARY</span></div><p>Public signals show {selectedMarket.options[0].label} leading on current activity. This is a factual synthesis, not a recommendation or safety rating.</p><div className="sources"><span><CircleHelp size={13} /> {selectedMarket.source}</span><span>•</span><span>{selectedMarket.sourceDate}</span></div></div></div><div className="room-foot"><div><span className="muted-label">Creator take</span><p>“{selectedMarket.take}”</p><button className="proof-button" onClick={() => setShowProof(true)}><FileCheck2 size={14} /> View proof</button></div><div className="room-stat"><span className="muted-label">Total volume</span><strong>{formatVolume(selectedMarket.volume)}</strong><small>{selectedMarket.participants} participants</small></div></div></div><div className="position-panel"><div className="position-heading"><span>TAKE A POSITION</span><span className="devnet-pill">DEVNET</span></div><p className="position-sub">Pick an outcome. Stay curious.</p><div className="outcome-list">{selectedMarket.options.map((option, index) => <button key={option.label} onClick={() => setSelectedOption(index)} className={selectedOption === index ? 'outcome selected' : 'outcome'}><span className="outcome-dot" style={{ background: option.color }} /><span>{option.label}</span><strong>{pct(option, selectedMarket.options)}%</strong>{selectedOption === index && <span className="check">✓</span>}</button>)}</div><label className="amount-label">Position amount <span>USDC (test)</span></label><div className="amount-input"><span>$</span><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" /><div className="quick-amounts"><button onClick={() => setAmount('10')}>$10</button><button onClick={() => setAmount('25')}>$25</button><button onClick={() => setAmount('100')}>$100</button></div></div><div className="position-summary"><span>Potential payout</span><strong>${(Number(amount || 0) * (100 / Math.max(1, pct(selectedMarket.options[selectedOption], selectedMarket.options)))).toFixed(2)}</strong></div><div className="network-row"><span>Network <strong>Solana Devnet</strong></span><span>Wallet <strong>{connected ? walletAddress : 'Not connected'}</strong></span></div><button className="confirm-button" onClick={() => void handlePosition()}>{connected ? 'Confirm position' : 'Connect wallet to continue'} <ArrowUpRight size={16} /></button><p className="fine-print">Demo API position · No on-chain funds are moved in demo mode</p></div></div></div></section>
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="#top" aria-label="BeatX home">
+          <span className="brand-mark"><span /></span>
+          <span>Beat<span className="brand-x">X</span></span>
+        </a>
 
-      <section className="below-grid wrap" id="creators"><div className="activity-card"><div className="card-heading"><div><div className="section-kicker">LIVE ACTIVITY</div><h3>What’s moving</h3></div><span className="live-label"><span className="pulse-dot" /> Live</span></div><div className="activity-list"><Activity label="Mira Chen" action="took a position on" target="Monad" amount="$80" color="#b6ff61" time="12 sec ago" /><Activity label="Alex Rivera" action="created" target="Solana hackathon" amount="" color="#7dd3fc" time="2 min ago" /><Activity label="Nadia Park" action="followed" target="SOL threshold" amount="" color="#fbbf24" time="4 min ago" /><Activity label="BeatX Resolver" action="verified" target="Devnet proof #041" amount="" color="#c4b5fd" time="8 min ago" /></div><button className="activity-more">View activity <ArrowUpRight size={14} /></button></div><div className="creator-card"><div className="creator-card-art"><span className="art-orb orb-a" /><span className="art-orb orb-b" /><span className="art-grid" /><div className="art-copy"><span>CREATOR SPOTLIGHT</span><strong>Mira Chen</strong><small>12 markets · 4.8K followers</small></div></div><div className="creator-card-body"><div className="creator-card-title"><div className="creator-avatar large">MC</div><div><strong>Mira Chen</strong><span>Market cartographer</span></div><button className="icon-button"><Heart size={16} /></button></div><div className="creator-metrics"><div><span>Settled</span><strong>8</strong></div><div><span>Volume</span><strong>$184K</strong></div><div><span>Followers</span><strong>4.8K</strong></div></div><button className="outline-button" onClick={() => notify('Creator profile opened')}>View creator profile <ArrowUpRight size={15} /></button></div></div></section>
-      <section className="portfolio-section wrap" id="portfolio"><div className="section-heading"><div><div className="section-kicker">YOUR SIGNAL</div><h2>Portfolio <em>preview.</em></h2></div><span className="devnet-pill">SOLANA DEVNET</span></div><div className="portfolio-grid"><div className="portfolio-total"><span className="muted-label">Total position value</span><strong>{connected ? '$125.00' : '—'}</strong><small>{connected ? '1 open position · demo asset' : 'Connect a wallet to view positions'}</small></div><div className="portfolio-stat"><span className="muted-label">Open positions</span><strong>{connected ? '1' : '0'}</strong><span className="portfolio-status">{connected ? 'Tracking live' : 'Not connected'}</span></div><div className="portfolio-stat"><span className="muted-label">Claimable</span><strong>$0.00</strong><span className="portfolio-status">No final resolutions</span></div></div></section>
+        <nav className="desktop-nav">
+          <a className="active" href="#explore">Explore</a>
+          <button onClick={() => setShowCreate(true)}>Create</button>
+          <a href="#live">Live</a>
+          <a href="#creators">Creators</a>
+        </nav>
 
-      <section className="how-section wrap"><div className="section-kicker">SIMPLE BY DESIGN</div><h2>From curiosity<br />to <em>conviction.</em></h2><div className="steps"><Step num="01" icon={<Compass size={19} />} title="Discover" text="Find a question worth answering, backed by transparent public evidence." /><Step num="02" icon={<BarChart3 size={19} />} title="Take a position" text="Choose an outcome and put your call on-chain with a test settlement asset." /><Step num="03" icon={<ShieldCheck size={19} />} title="See the proof" text="When reality decides, deterministic evidence settles the market for everyone." /></div></section>
-    </main>
-    <footer className="footer wrap"><div className="footer-top"><a className="brand" href="#top"><span className="brand-mark"><span /></span><span>Beat<span className="brand-x">X</span></span></a><div className="footer-links"><a href="#explore">Explore</a><a href="#creators">Creators</a><a href="#live">How it works</a><a href="https://solana.com" target="_blank" rel="noreferrer">Solana <ExternalLink size={12} /></a></div><div className="network-badge"><span className="pulse-dot" /> Solana Devnet</div></div><div className="footer-bottom"><span>© 2026 BeatX. Built for the next outcome.</span><span className="credit">An idea by <strong>AlexaFairy 🧚‍♀️</strong><br /><small>She made the bet. AI helped her build it.</small></span></div></footer>
-    {showCreate && <CreateModal onClose={() => setShowCreate(false)} onCreate={(draft) => void handleCreate(draft)} />}
-    {showProof && <ProofModal market={selectedMarket} onClose={() => setShowProof(false)} />}
-    {notice && <div className="toast"><ShieldCheck size={16} /> {notice}</div>}
-  </div>
+        <div className="top-actions">
+          <button className="wallet-button" onClick={handleWallet} type="button">
+            <Wallet size={16} />
+            {isConnected ? 'Connected' : 'Connect Wallet'}
+          </button>
+        </div>
+      </header>
+
+      <main id="top">
+        <section className="hero wrap">
+          <div className="hero-copy">
+            <div className="eyebrow">
+              <span className="pulse-dot" />
+              LIVE ON SOLANA DEVNET
+              <span className="eyebrow-line" />
+            </div>
+
+            <h1>Predict what<br /><em>happens next.</em></h1>
+
+            <div className="hero-actions">
+              <button className="primary" onClick={() => setShowCreate(true)}>Create Market</button>
+              <button className="secondary" onClick={handleWallet}>Connect Wallet</button>
+            </div>
+
+            <div className="meta-row">
+              <span><ShieldCheck size={14} /> {isConnected ? address?.slice(0, 8) + '...' : 'No wallet connected'}</span>
+              <span>Network: {network === 'unknown' ? 'Checking...' : network}</span>
+              <span><Flame size={14} /> {balance.toFixed(2)} SOL</span>
+            </div>
+          </div>
+
+          <div className="hero-orbit">
+            <div className="orbit-ring ring-one" />
+            <div className="orbit-ring ring-two" />
+            <div className="orbit-core">
+              <div className="core-label">LIVE MARKET</div>
+              <strong>{selectedMarket.question}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="ticker">
+          <div className="ticker-inner">
+            <span>MARKETS LIVE</span>
+            <i />
+            <span className="ticker-item">SOL / $184.22 <b className="up">+3.8%</b></span>
+            <span className="ticker-item">BTC / $63.1K <b className="down">-1.2%</b></span>
+            <span className="ticker-item">ETH / $81.4K <b className="down">-0.6%</b></span>
+          </div>
+        </section>
+
+        <section className="section wrap" id="explore">
+          <div className="section-heading">
+            <div>
+              <div className="section-kicker">DISCOVER THE SIGNAL</div>
+              <h2>Trending <em>Beats</em></h2>
+            </div>
+            <a className="view-link" href="#live">View all markets</a>
+          </div>
+
+          <div className="market-grid">
+            {visibleMarkets.map((market) => (
+              <button key={market.id} className={market.featured ? 'market-card featured' : 'market-card'} onClick={() => { setSelectedMarket(market); setSelectedOption(0) }}>
+                <div className="card-top">
+                  <div className="creator-badge" style={{ background: market.accent }}>{market.initials}</div>
+                  <div className="card-copy">
+                    <div className="card-kind">{market.category}</div>
+                    <div className="card-title">{market.question}</div>
+                  </div>
+                </div>
+
+                <div className="card-meta">
+                  <div>
+                    <div className="meta-label">Volume</div>
+                    <div className="meta-value">{formatVolume(market.volume)}</div>
+                  </div>
+                  <div>
+                    <div className="meta-label">Participants</div>
+                    <div className="meta-value">{market.participants}</div>
+                  </div>
+                </div>
+
+                <div className="card-options">
+                  {market.options.map((option) => (
+                    <div key={option.label} className="option-pill">
+                      {option.label}
+                    </div>
+                  ))}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="room-section" id="live">
+          <div className="wrap">
+            <div className="section-heading room-heading">
+              <div>
+                <div className="section-kicker">THE MARKET ROOM</div>
+                <h2>Make your <em>choice.</em></h2>
+              </div>
+            </div>
+
+            <div className="market-room">
+              <div className="room-panel">
+                <div className="room-panel-header">
+                  <div>
+                    <div className="section-kicker">CURRENT MARKET</div>
+                    <h2>{selectedMarket.question}</h2>
+                  </div>
+                  <button className="ghost" onClick={() => setShowProof(true)}>Proof</button>
+                </div>
+
+                <div className="room-panel-body">
+                  <div className="option-list">
+                    {selectedMarket.options.map((option, index) => (
+                      <button
+                        key={option.label}
+                        className={selectedOption === index ? 'option-active' : ''}
+                        onClick={() => setSelectedOption(index)}
+                      >
+                        <div className="option-name">{option.label}</div>
+                        <div className="option-rate">{pct(option, selectedMarket.options)}%</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="position-inline">
+                    <input
+                      value={amount}
+                      onChange={(event) => setAmount(event.target.value)}
+                      placeholder="0.01"
+                    />
+                    <button className="primary" onClick={handlePosition}>
+                      Place bet
+                    </button>
+                  </div>
+
+                  <div className="room-panel-actions">
+                    <button className="secondary" onClick={handleCloseMarket}>Close Market</button>
+                    <button className="secondary" onClick={handleResolve}>Resolve</button>
+                    <button className="secondary" onClick={handleClaim}>Claim</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="sidebar-card">
+                <div className="card-heading">
+                  <div>
+                    <div className="section-kicker">YOUR SIGNAL</div>
+                    <h2>Portfolio</h2>
+                  </div>
+                </div>
+
+                <div className="portfolio-list">
+                  {portfolio.length > 0 ? (
+                    portfolio.map((entry) => (
+                      <div key={entry.id} className="portfolio-entry">
+                        <div className="portfolio-label">{entry.option || entry.marketId}</div>
+                        <div className="portfolio-value">{entry.amount || ''}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="portfolio-empty">No positions yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="how-section wrap">
+          <div className="section-kicker">SIMPLE BY DESIGN</div>
+          <h2>From curiosity<br />to <em>conviction.</em></h2>
+
+          <div className="steps">
+            <Step num="01" icon={<Compass size={18} />} title="Connect your wallet" text="Link your Phantom, Solflare, or Backpack wallet." />
+            <Step num="02" icon={<Sparkles size={18} />} title="Create a market" text="Draft a question, add outcomes, set your close date." />
+            <Step num="03" icon={<Sparkles size={18} />} title="Place a bet" text="Choose an outcome and lock in your stake." />
+            <Step num="04" icon={<ShieldCheck size={18} />} title="Settle and claim" text="Resolve the market and distribute winnings automatically." />
+          </div>
+        </section>
+      </main>
+
+      <footer className="footer wrap">
+        <div className="footer-top">
+          <a className="brand" href="#top">
+            <span className="brand-mark"><span /></span>
+            <span>Beat<span className="brand-x">X</span></span>
+          </a>
+          <div className="footer-links">
+            <a href="#explore">Explore</a>
+            <a href="#create">Create</a>
+            <a href="#portfolio">Portfolio</a>
+          </div>
+        </div>
+      </footer>
+
+      {showCreate && (
+        <CreateModal
+          onClose={() => setShowCreate(false)}
+          onCreate={(draft) => void handleCreate(draft)}
+        />
+      )}
+
+      {showProof && (
+        <ProofModal
+          market={selectedMarket}
+          onClose={() => setShowProof(false)}
+        />
+      )}
+
+      {notice && <div className="toast"><ShieldCheck size={16} /> {notice}</div>}
+    </div>
+  )
 }
 
-function MarketCard({ market, index, onClick }: { market: Market; index: number; onClick: () => void }) { return <button className={market.featured ? 'market-card featured' : 'market-card'} onClick={onClick}><div className="market-card-top"><span className="tag">{market.category}</span><span className="card-time"><Clock3 size={13} /> {market.ends}</span></div><h3>{market.question}</h3><div className="card-options">{market.options.map((option) => <div className="card-option" key={option.label}><div className="option-line"><span>{option.label}</span><strong>{pct(option, market.options)}%</strong></div><div className="thin-bar"><span style={{ width: `${pct(option, market.options)}%`, background: option.color }} /></div></div>)}</div><div className="market-card-bottom"><span><span className="mini-avatar" style={{ background: market.accent }}>{market.initials}</span>{market.creator}</span><span>{formatVolume(market.volume)} vol <ArrowUpRight size={14} /></span></div>{index === 0 && <span className="featured-mark"><Flame size={12} /> Trending</span>}</button> }
-function Activity({ label, action, target, amount, color, time }: { label: string; action: string; target: string; amount: string; color: string; time: string }) { return <div className="activity-row"><span className="mini-avatar" style={{ background: color }}>{label.split(' ').map((part) => part[0]).join('')}</span><div><p><strong>{label}</strong> {action} <b>{target}</b>{amount && <span className="activity-amount"> {amount}</span>}</p><small>{time}</small></div></div> }
-function Step({ num, icon, title, text }: { num: string; icon: ReactNode; title: string; text: string }) { return <div className="step"><div className="step-top"><span>{num}</span><div className="step-icon">{icon}</div></div><h3>{title}</h3><p>{text}</p></div> }
-function ProofModal({ market, onClose }: { market: Market; onClose: () => void }) { return <div className="modal-backdrop" onMouseDown={onClose}><div className="proof-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="section-kicker">MARKET PROOF</div><h2>Evidence, <em>in public.</em></h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div><div className="proof-result"><FileCheck2 size={18} /><div><span>Current state</span><strong>Market is open</strong></div><span className="devnet-pill">DEMO</span></div><div className="proof-rows"><div><span>Policy hash</span><code>sha256:demo-policy-locked</code></div><div><span>Evidence hash</span><code>sha256:awaiting-resolution</code></div><div><span>Resolution source</span><strong>{market.source}</strong></div><div><span>Resolver</span><strong>BeatX deterministic resolver v1</strong></div><div><span>Network</span><strong>Solana Devnet · no settlement yet</strong></div></div><p className="proof-note">This market is a demo preview. Once resolved, the proof bundle will include observations, timestamps, resolver authorization, and the Solana transaction signature.</p><button className="outline-button" onClick={onClose}>Close proof <X size={14} /></button></div></div> }
+function ProofModal({ market, onClose }: { market: any; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="proof-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="section-kicker">PROOF</div>
+            <h2>{market.question}</h2>
+          </div>
+        </div>
+
+        <div className="proof-body">
+          <div className="proof-box">
+            <div className="proof-label">Policy hash</div>
+            <div className="proof-value">{market.policyHash || 'No hash yet'}</div>
+          </div>
+          <div className="proof-box">
+            <div className="proof-label">Wallet</div>
+            <div className="proof-value">{market.creatorAddress || 'Wallet not connected'}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CreateModal({ onClose, onCreate }: { onClose: () => void; onCreate: (draft: DraftMarket) => void }) {
   const [question, setQuestion] = useState('')
   const [category, setCategory] = useState<Exclude<Category, 'All'>>('Crypto')
   const [outcomes, setOutcomes] = useState('Option A, Option B')
+
   const submit = () => {
     const options = outcomes.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8)
     if (question.trim().length < 12 || options.length < 2) return
     onCreate({ question: question.trim(), category, options })
   }
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="create-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="section-kicker">CREATE A BEAT</div><h2>Put a question<br /><em>on the map.</em></h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div><label>Question<input placeholder="What happens next?" value={question} onChange={(event) => setQuestion(event.target.value)} /></label><div className="form-row"><label>Category<select value={category} onChange={(event) => setCategory(event.target.value as Exclude<Category, 'All'>)}><option>Crypto</option><option>Technology</option><option>Games</option><option>Social</option><option>Science</option></select></label><label>Market type<select><option>Multiple choice</option><option>Yes / No</option><option>Race</option></select></label></div><label>Outcomes<input placeholder="Add outcomes separated by commas" value={outcomes} onChange={(event) => setOutcomes(event.target.value)} /></label><div className="policy-preview"><ShieldCheck size={16} /><div><strong>Policy preview</strong><p>BeatX will resolve this market using structured public evidence. You can review and lock the policy before publishing.</p></div></div><button className="confirm-button" disabled={question.trim().length < 12 || outcomes.split(',').filter((item) => item.trim()).length < 2} onClick={submit}>{question ? 'Create market draft' : 'Add a question first'} <ArrowUpRight size={16} /></button><p className="fine-print">Demo creator mode · No wallet required to draft</p></div></div>
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="create-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <div className="section-kicker">CREATE MARKET</div>
+            <h2>New market draft</h2>
+          </div>
+          <button className="ghost" onClick={onClose}>Close</button>
+        </div>
+
+        <div className="modal-body">
+          <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a market question..." />
+          <select value={category} onChange={(event) => setCategory(event.target.value as Exclude<Category, 'All'>)}>
+            <option value="Crypto">Crypto</option>
+            <option value="Technology">Technology</option>
+            <option value="Games">Games</option>
+            <option value="Social">Social</option>
+            <option value="Science">Science</option>
+          </select>
+
+          <textarea value={outcomes} onChange={(event) => setOutcomes(event.target.value)} placeholder="Option A, Option B" />
+          <button className="primary" onClick={submit}>Create market</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Step({ num, icon, title, text }: { num: string; icon: ReactNode; title: string; text: string }) {
+  return (
+    <div className="step">
+      <div className="step-top">
+        <span>{num}</span>
+        <div className="step-icon">{icon}</div>
+      </div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </div>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)
