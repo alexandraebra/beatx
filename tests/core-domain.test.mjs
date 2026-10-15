@@ -25,6 +25,28 @@ test('evidence bundle is traceable and hashes its observations', async () => {
   assert.deepEqual(bundle.sources, ['https://example.com/a'])
 })
 
+test('resolution fails closed when no verified observation matches an outcome', async () => {
+  await assert.rejects(() => createEvidenceBundle('demo-market', policy, []), /NO_VERIFIED_EVIDENCE/)
+  await assert.rejects(() => createEvidenceBundle('demo-market', policy, [{ entityId: 'A', metric: 'signal', value: 0, source: 'fallback', sourceType: 'fallback', sourceUrl: 'https://example.com/fallback', observedAt: '2026-09-19T00:00:00.000Z', verified: false, confidence: 0 }]), /NO_VERIFIED_EVIDENCE/)
+})
+
+test('resolution rejects rules the deterministic resolver does not implement', async () => {
+  await assert.rejects(() => createEvidenceBundle('demo-market', { ...policy, rule: 'Arbitrary oracle outcome' }, [{ entityId: 'A', metric: 'signal', value: 1, source: 'test', sourceType: 'fixture', sourceUrl: 'https://example.com/a', observedAt: '2026-09-19T00:00:00.000Z', verified: true, confidence: 1 }]), /UNSUPPORTED_RESOLUTION_RULE/)
+})
+
+test('highest-confidence rule selects the highest single observation, not the sum', async () => {
+  const bundle = await createEvidenceBundle('demo-market', policy, [
+    { entityId: 'A', metric: 'signal', value: 1, source: 'test', sourceType: 'fixture', sourceUrl: 'https://example.com/a', observedAt: '2026-09-19T00:00:00.000Z', verified: true, confidence: 0.7 },
+    { entityId: 'B', metric: 'signal', value: 1, source: 'test', sourceType: 'fixture', sourceUrl: 'https://example.com/b1', observedAt: '2026-09-19T00:00:00.000Z', verified: true, confidence: 0.4 },
+    { entityId: 'B', metric: 'signal', value: 1, source: 'test', sourceType: 'fixture', sourceUrl: 'https://example.com/b2', observedAt: '2026-09-19T00:00:00.000Z', verified: true, confidence: 0.4 },
+  ])
+  assert.equal(bundle.outcome, 'A')
+})
+
+test('verified observations with invalid confidence are rejected', async () => {
+  await assert.rejects(() => createEvidenceBundle('demo-market', policy, [{ entityId: 'A', metric: 'signal', value: 1, source: 'test', sourceType: 'fixture', sourceUrl: 'https://example.com/a', observedAt: '2026-09-19T00:00:00.000Z', verified: true, confidence: 1.5 }]), /INVALID_VERIFIED_EVIDENCE/)
+})
+
 test('settlement rejects positions after close and uses bigint arithmetic', () => {
   const market = { id: 'm', status: 'OPEN', policyHash: 'sha256:x', openedAt: 1, closeAt: 10, vaultBaseUnits: 1000n, optionTotalsBaseUnits: [500n, 500n] }
   assert.throws(() => assertCanPlacePosition(market, 10), /MARKET_CLOSED/)

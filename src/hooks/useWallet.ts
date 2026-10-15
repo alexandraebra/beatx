@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
-import { connectSolanaWallet, disconnectWallet, getWalletBalance, type WalletState } from '../wallet'
+import { connectSolanaWallet, disconnectWallet, getWalletBalance } from '../wallet'
+import type { WalletState } from '../types'
+
+const initialState: WalletState = {
+  address: null,
+  isConnected: false,
+  network: 'unknown',
+  balance: 0,
+  source: 'demo',
+  error: null,
+}
 
 export function useWallet() {
-  const [state, setState] = useState<WalletState>({
-    address: null,
-    isConnected: false,
-    network: 'unknown',
-    balance: 0,
-    source: 'demo',
-    error: null,
-  })
+  const [state, setState] = useState<WalletState>(initialState)
   const [isLoading, setIsLoading] = useState(false)
 
   const connect = useCallback(async () => {
     setIsLoading(true)
     try {
-      const result = await connectSolanaWallet()
-      setState(result)
-    } catch (error: any) {
-      setState((prev) => ({ ...prev, error: error?.message || 'Connection failed' }))
+      const nextState = await connectSolanaWallet()
+      setState(nextState)
+      return nextState
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Connection failed'
+      const failedState = { ...initialState, error: message }
+      setState(failedState)
+      return failedState
     } finally {
       setIsLoading(false)
     }
@@ -28,35 +35,29 @@ export function useWallet() {
     setIsLoading(true)
     try {
       await disconnectWallet()
-      setState({
-        address: null,
-        isConnected: false,
-        network: 'unknown',
-        balance: 0,
-        source: 'demo',
-        error: null,
-      })
+      setState(initialState)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   const refreshBalance = useCallback(async () => {
-    if (!state.address) return
+    if (!state.address || !state.isConnected || state.source === 'demo') return
     try {
       const balance = await getWalletBalance(state.address)
-      setState((prev) => ({ ...prev, balance }))
+      setState((previous) => ({ ...previous, balance }))
     } catch (error) {
-      console.error('Balance refresh error:', error)
+      const message = error instanceof Error ? error.message : 'Balance refresh failed'
+      setState((previous) => ({ ...previous, error: message }))
     }
-  }, [state.address])
+  }, [state.address, state.isConnected, state.source])
 
   useEffect(() => {
-    if (!state.address || !state.isConnected) return
-    refreshBalance()
-    const timer = setInterval(refreshBalance, 30000)
-    return () => clearInterval(timer)
-  }, [state.address, state.isConnected, refreshBalance])
+    if (!state.address || !state.isConnected || state.source === 'demo') return
+    void refreshBalance()
+    const timer = window.setInterval(() => void refreshBalance(), 30000)
+    return () => window.clearInterval(timer)
+  }, [state.address, state.isConnected, state.source, refreshBalance])
 
   return { ...state, isLoading, connect, disconnect, refreshBalance }
 }

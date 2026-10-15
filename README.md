@@ -1,80 +1,65 @@
 # BeatX
 
-BeatX is a creator-powered prediction market experience built for Solana. It helps people discover measurable questions, inspect neutral evidence, take a position, and follow the proof when reality resolves the market.
+BeatX is a Solana prediction-market prototype. This repository currently ships a **demo preview**: the market values and participation figures are fixtures, and the browser does not sign or submit on-chain transactions. The official settlement asset is the BEATX Token-2022 mint listed below; the current preview does not move real BEATX.
 
-This repository currently ships a polished, deterministic demo shell: no wallet, API key, database, or AI provider is required to explore it. Simulated market values are labeled as demo data; public-source labels in the UI describe the intended evidence path and are not presented as live verified observations.
+## Official token
+
+- **BEATX mint:** `HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump`
+- [Pump.fun token page](https://pump.fun/coin/HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump)
+- [Solana Explorer](https://explorer.solana.com/address/HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump)
+- Builds without the explicitly guarded `devnet-test-mint` feature accept only this Token-2022 mint with **6 decimals**. They do not accept SOL, USDC, or an arbitrary SPL mint as a market settlement asset.
 
 ## Run locally
 
 ```bash
-npm install
+npm ci
+cp .env.example .env
+export BEATX_RESOLVER_AUTHORITY="$(openssl rand -hex 32)"
 npm run dev
 ```
-
-For filesystem mounts that do not support executable symlinks, use `npm install --bin-links=false` and run Vite through `node node_modules/vite/bin/vite.js`.
 
 Useful checks:
 
 ```bash
 npm run typecheck
 npm test
+npm run e2e:demo
 npm run build
 npm run api:build
-npm run e2e:demo
 ```
 
-The acceptance evidence is recorded in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md).
+The acceptance notes are in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md). In a second terminal, run `npm run api:build && npm run api:start` to start the **loopback-only** in-memory demo API; it requires the random `BEATX_RESOLVER_AUTHORITY` above, is not a production service or a substitute for on-chain settlement, and deliberately refuses to start when `NODE_ENV=production`. Provider failures are marked stale, and the deterministic resolver fails closed when verified evidence is missing, malformed, or the resolution rule is unsupported. The API is not deployed for the GitHub Pages site.
 
-Run the local demo API with `npm run api:start`. It exposes `/health`, `/api/markets`, `/api/markets/:id/evidence`, `/api/portfolio/:wallet`, `POST /api/markets`, `POST /api/markets/:id/positions`, `POST /api/markets/:id/close`, `POST /api/markets/:id/resolve`, `/api/policies/hash`, and `/api/providers/github`. Provider failures return a stale deterministic fallback instead of taking down the product. The demo lifecycle locks a policy on the first position, uses base-unit strings, rejects invalid/late positions, requires a closed market and matching policy hash for resolution, derives the winner from the evidence bundle, requires the configured resolver authority header, verifies claim ownership, and emits an evidence hash.
+## What the preview includes
 
-## What is in the demo
+- Responsive market discovery, search, category filters, a proof view, a draft-market form, and portfolio UI.
+- Explicit demo labels; seeded volumes, participant counts, and outcome distributions are **not live market data**.
+- A wallet-connect preview state, but no browser-side signing or real fund transfer.
+- Integer-safe BEATX base-unit math (`1 BEATX = 1,000,000` base units).
+- A deterministic TypeScript domain package for policy hashing, evidence bundles, outcome selection, payout math, and lifecycle guards.
+- An in-memory API and Prisma schema contract; PostgreSQL persistence is not enabled.
 
-- Dark-first responsive landing page with trending markets, category filters, live activity, creator spotlight, and a market-room workflow.
-- Deterministic market distributions and integer-safe payout preview; the UI uses a stablecoin concept labeled `USDC (test)` and `Solana Devnet`.
-- Wallet states, position selection, amount entry, connect/confirm feedback, creator market draft flow, share feedback, and neutral intelligence copy.
-- Wallet button uses an injected Solana provider when available and clearly falls back to a no-funds demo wallet when no extension is installed.
-- Explicit separation between BeatX Intelligence, Creator Take, and market source labels.
-- No AI winner selection, no simulated live data presented as real, and no private keys in the repository.
-- TypeScript domain package for canonical policy hashing, evidence bundles, deterministic outcome selection, bigint payout math, and lifecycle guards.
-- Dependency-light demo API with provider timeout, in-memory snapshot cache, stale-data signaling, fallback behavior, and no required secrets.
-- PostgreSQL/Prisma schema contract at `prisma/schema.prisma` covering users, creators, markets, immutable `MarketPolicy`, options, positions, evidence, resolutions, claims, comments, follows, provider snapshots, and activity. The demo API remains in-memory until the database runtime is enabled.
+## Solana program status
 
-## Architecture direction
+The Anchor program stores compact market/policy/evidence state and uses a Token-2022 vault. It validates the official BEATX mint in normal builds, restricts initial protocol configuration to the program's upgrade authority, and supports fee withdrawal only after resolution. Market account allocation scales with the number of outcomes: a two-outcome market uses 343 bytes including its discriminator, compared with 583 bytes at the eight-outcome maximum (240 bytes fewer). A current Mainnet rent-exemption quote is 0.002392680 SOL versus 0.003611880 SOL, a **0.001219200 SOL saving per two-outcome market**; rent parameters can change.
 
-```text
-React/Vite demo UI
-       |
-TypeScript domain contracts
-       |
-API + PostgreSQL (next integration)
-       |
-Provider adapters -> normalized observations -> deterministic resolver
-       |
-Solana Anchor settlement program (Devnet)
-```
+The previous Devnet deployment is a **legacy build** and is not the migrated BEATX Token-2022 program. This branch has passed host Rust checks/tests, but has **not** yet had an Anchor/SBF build, a post-migration Devnet acceptance run, or a Mainnet deployment. Do not treat the preview, old Devnet program, or test build as production-ready.
 
-The production boundary should keep large evidence bundles off-chain. A resolved market stores the policy hash and evidence hash on Solana, while the structured observations, sources, timestamps, and resolver version remain in the API/database. AI may summarize traceable observations but never chooses a winner or controls funds. The demo resolver defaults to `demo-resolver`; set `BEATX_RESOLVER_AUTHORITY` outside Git when using a non-demo authority.
+See [`chains/solana/README.md`](chains/solana/README.md) for build and safety instructions. The `devnet-test-mint` Cargo feature is only for Devnet fixture tests; never enable it for a Mainnet build.
 
-## Environment
+## GitHub Pages and `beatx.world`
 
-Copy `.env.example` for local configuration. Demo mode works without secrets. Never commit `.env`, wallet material, GitHub tokens, RPC credentials, or provider keys.
+The Vite build uses `/` as its base path for the custom apex domain. GitHub Pages is configured for `beatx.world`; DNS and certificate activation must finish before the public site can load over HTTPS. For a typical Namecheap DNS setup, configure records on the domain's existing DNS host (do not change nameservers just to add these):
 
-## Security model
+- Apex `@`: GitHub Pages A records `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, and `185.199.111.153`.
+- `www`: CNAME to `alexandraebra.github.io`.
 
-Market policy is intended to become immutable after the first position. Settlement must use integer base units, reject positions after close, reject claims before finalization, make finalization and claims idempotent, and reconcile payouts against vault assets. Resolver authorization should be separated from AI and prepared for a future quorum.
+After DNS propagates, check the domain in **GitHub → Settings → Pages**, enable **Enforce HTTPS** when GitHub marks the certificate ready, and verify both `https://beatx.world/` and `https://www.beatx.world/`. A merge to `main` triggers the Pages workflow; this branch does not publish to the live site by itself.
 
-## Solana and API status
+## Security and deployment boundaries
 
-The UI is intentionally runnable without a Solana wallet or backend. The Anchor source passes `cargo check` and `anchor build` with Anchor 0.31.x. The settlement program is deployed on Devnet at `F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h`, and the funded instruction-level lifecycle is covered by `npm run e2e:solana`. The remaining production slices are cancellation/refund coverage, wallet-signed UI transactions, and the persisted Prisma/PostgreSQL runtime.
-
-## Roadmap
-
-1. Activate the Prisma/PostgreSQL runtime behind the existing schema contract.
-2. Add provider cache persistence and additional public adapters.
-3. Extend the live Devnet acceptance path with cancellation/refund coverage.
-4. Connect wallet transaction builders and replace demo position state with API-backed/on-chain state.
-
-## Credit
-
-An idea by AlexaFairy 🧚‍♀️  
-She made the bet. AI helped her build it.
+- Never commit `.env`, wallet keypairs/seeds, GitHub tokens, RPC credentials, or provider keys.
+- Keep resolver authorization server-side. The public browser must not receive a resolver secret.
+- Initialize protocol settings with the program upgrade authority before renouncing that authority.
+- Build production without `devnet-test-mint`; perform a separate SBF build, Devnet acceptance run, review, and security audit before any Mainnet release.
+- The preview's payout and portfolio flows are not on-chain claims.

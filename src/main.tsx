@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { Compass, Flame, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
 import { useWallet } from './hooks/useWallet'
 import { useApi } from './hooks/useApi'
+import type { ApiMarket, Position } from './types'
 import './styles.css'
 
 type Category = 'All' | 'Crypto' | 'Technology' | 'Games' | 'Social' | 'Science'
@@ -30,13 +31,58 @@ const marketSeed: Market[] = [
   { id: 'market-cap', question: 'Which project reaches $10M market cap first?', category: 'Crypto', creator: 'Mira Chen', initials: 'MC', accent: '#b6ff61', ends: '2d 14h', volume: 39020, participants: 140, featured: true, options: [{ label: 'Monad', volume: 42 }, { label: 'Sui', volume: 38 }, { label: 'Berachain', volume: 20 }] },
   { id: 'hackathon', question: 'Which team wins the next Solana hackathon?', category: 'Technology', creator: 'Alex Rivera', initials: 'AR', accent: '#7dd3fc', ends: '5d 03h', volume: 24780, participants: 96, options: [{ label: 'Monad', volume: 46 }, { label: 'Solana', volume: 34 }, { label: 'Other', volume: 20 }] },
   { id: 'sol-threshold', question: 'Will SOL break $220 before the monthly close?', category: 'Crypto', creator: 'Nadia Park', initials: 'NP', accent: '#fbbf24', ends: '9d 06h', volume: 18640, participants: 82, options: [{ label: 'Yes', volume: 62 }, { label: 'No', volume: 38 }] },
-  { id: 'launch-date', question: 'Will Atlas release its public beta before October 15?', category: 'Games', creator: 'Owen Brooks', initials: 'OB', accent: '#f472b6', ends: '12d 11h', volume: 9210, participants: 51, options: [{ label: 'Yes', volume: 57 }, { label: 'No', volume: 43 }] },
+  { id: 'launch-date', question: 'Will Atlas launch a public beta by November 15, 2026?', category: 'Games', creator: 'Owen Brooks', initials: 'OB', accent: '#f472b6', ends: '30d 11h', volume: 9210, participants: 51, options: [{ label: 'Yes', volume: 57 }, { label: 'No', volume: 43 }] },
 ]
 
 const categories: Category[] = ['All', 'Crypto', 'Technology', 'Games', 'Social', 'Science']
 
 function formatVolume(value: number) {
-  return value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value}`
+  const amount = value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  return `${amount} BEATX`
+}
+
+function formatBaseUnits(value: string) {
+  try {
+    const units = BigInt(value)
+    const whole = units / 1_000_000n
+    const fraction = (units % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
+    return fraction ? `${whole}.${fraction} BEATX` : `${whole} BEATX`
+  } catch {
+    return '0 BEATX'
+  }
+}
+
+function formatTimeRemaining(closeAt: string) {
+  const remaining = Date.parse(closeAt) - Date.now()
+  if (!Number.isFinite(remaining) || remaining <= 0) return 'Closed'
+  const days = Math.floor(remaining / 86_400_000)
+  const hours = Math.floor((remaining % 86_400_000) / 3_600_000)
+  return days > 0 ? `${days}d ${hours}h` : `${hours}h`
+}
+
+function marketFromApi(market: ApiMarket): Market {
+  const category: Exclude<Category, 'All'> = ['Crypto', 'Technology', 'Games', 'Social', 'Science'].includes(market.category)
+    ? market.category as Exclude<Category, 'All'>
+    : 'Crypto'
+  const options = market.options.map((label, index) => ({
+    label,
+    volume: Number(BigInt(market.optionTotalsBaseUnits[index] ?? '0')) / 1_000_000,
+  }))
+  return {
+    id: market.id,
+    question: market.question,
+    category,
+    creator: 'BeatX demo',
+    initials: 'BX',
+    accent: '#b6ff61',
+    ends: formatTimeRemaining(market.closeAt),
+    volume: Number(BigInt(market.totalVolumeBaseUnits)) / 1_000_000,
+    participants: market.participantCount,
+    options,
+    status: market.status === 'CANCELLED' ? 'CLOSED' : market.status,
+    closeAt: market.closeAt,
+    policyHash: market.policyHash,
+  }
 }
 
 function pct(option: Market['options'][number], all: Market['options']) {
@@ -62,8 +108,8 @@ type DraftMarket = {
 }
 
 function App() {
-  const { address, isConnected, network, balance, connect, disconnect } = useWallet()
-  const { getMarkets, createMarket, placePosition, getPortfolio, claimPayout, closeMarket, resolveMarket } = useApi()
+  const { address, isConnected, network, balance, source, connect, disconnect } = useWallet()
+  const { isApiConfigured, getMarkets, createMarket, placePosition, getPortfolio, claimPayout, closeMarket, resolveMarket } = useApi()
   const [activeCategory, setActiveCategory] = useState<Category>('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [marketList, setMarketList] = useState<Market[]>(marketSeed)
@@ -73,7 +119,7 @@ function App() {
   const [showCreate, setShowCreate] = useState(false)
   const [showProof, setShowProof] = useState(false)
   const [notice, setNotice] = useState('')
-  const [portfolio, setPortfolio] = useState<any[]>([])
+  const [portfolio, setPortfolio] = useState<Position[]>([])
 
   const visibleMarkets = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
@@ -93,8 +139,9 @@ function App() {
     try {
       const data = await getMarkets()
       if (Array.isArray(data) && data.length > 0) {
-        setMarketList(data as Market[])
-        setSelectedMarket((data as Market[])[0])
+        const markets = data.map(marketFromApi)
+        setMarketList(markets)
+        setSelectedMarket(markets[0])
       }
     } catch {
       setMarketList(marketSeed)
@@ -123,8 +170,9 @@ function App() {
     }
 
     try {
-      await connect()
-      if (address) notify('Wallet connected successfully')
+      const connected = await connect()
+      if (connected.error) notify(connected.error)
+      else notify(connected.source === 'demo' ? 'Demo wallet connected — no real funds or transactions' : 'Wallet connected')
     } catch {
       notify('Wallet could not be connected')
     }
@@ -136,15 +184,20 @@ function App() {
       return
     }
 
+    if (!isApiConfigured) {
+      notify('Demo preview only — no live API or on-chain transaction is connected')
+      return
+    }
+
     const amountBaseUnits = toBaseUnits(amount)
     if (!amountBaseUnits) {
-      notify('Enter a valid amount in SOL-style format')
+      notify('Enter a valid BEATX amount with up to 6 decimal places')
       return
     }
 
     try {
       await placePosition(selectedMarket.id, selectedOption, amountBaseUnits, address)
-      notify(`Position recorded for ${selectedMarket.options[selectedOption].label}`)
+      notify(source === 'demo' ? 'Demo position recorded — no tokens moved' : `Demo position recorded for ${selectedMarket.options[selectedOption].label}`)
     } catch (error: any) {
       notify(error.message || 'Could not place position')
     }
@@ -152,18 +205,19 @@ function App() {
 
   const handleCreate = async (draft: DraftMarket) => {
     try {
+      if (!isApiConfigured) {
+        notify('Demo preview only — market creation is not connected to a live API')
+        return
+      }
       const created = await createMarket(draft)
       const nextMarket: Market = {
-        ...created,
+        ...marketFromApi(created),
         question: created.question || draft.question,
-        category: created.category || draft.category,
+        category: created.category === 'Other' ? draft.category : created.category,
         creator: 'You',
         initials: 'YO',
         accent: '#b6ff61',
-        ends: '7d',
-        volume: 0,
-        participants: 0,
-        options: created.options || draft.options.map((label) => ({ label, volume: 0 })),
+        options: created.options.map((label) => ({ label, volume: 0 })),
       }
       setMarketList((current) => [nextMarket, ...current])
       setSelectedMarket(nextMarket)
@@ -210,6 +264,7 @@ function App() {
       }
       await claimPayout(selectedMarket.id, matched.id, address)
       notify('Payout claimed')
+      await loadPortfolio()
     } catch (error: any) {
       notify(error.message || 'Could not claim payout')
     }
@@ -226,14 +281,14 @@ function App() {
         <nav className="desktop-nav">
           <a className="active" href="#explore">Explore</a>
           <button onClick={() => setShowCreate(true)}>Create</button>
-          <a href="#live">Live</a>
-          <a href="#creators">Creators</a>
+          <a href="#live">Markets</a>
+          <a href="#how-it-works">How it works</a>
         </nav>
 
         <div className="top-actions">
           <button className="wallet-button" onClick={handleWallet} type="button">
             <Wallet size={16} />
-            {isConnected ? 'Connected' : 'Connect Wallet'}
+            {isConnected ? (source === 'demo' ? 'Demo Wallet' : 'Connected') : 'Connect Wallet'}
           </button>
         </div>
       </header>
@@ -243,7 +298,7 @@ function App() {
           <div className="hero-copy">
             <div className="eyebrow">
               <span className="pulse-dot" />
-              LIVE ON SOLANA DEVNET
+              BEATX DEMO PREVIEW · NO REAL FUNDS
               <span className="eyebrow-line" />
             </div>
 
@@ -255,9 +310,9 @@ function App() {
             </div>
 
             <div className="meta-row">
-              <span><ShieldCheck size={14} /> {isConnected ? address?.slice(0, 8) + '...' : 'No wallet connected'}</span>
-              <span>Network: {network === 'unknown' ? 'Checking...' : network}</span>
-              <span><Flame size={14} /> {balance.toFixed(2)} SOL</span>
+              <span><ShieldCheck size={14} /> {isConnected ? (source === 'demo' ? 'Demo wallet' : address?.slice(0, 8) + '...') : 'Demo mode only'}</span>
+              <span>Settlement asset: BEATX</span>
+              {isConnected && source === 'injected' && <span><Flame size={14} /> {network} gas: {balance.toFixed(2)} SOL</span>}
             </div>
           </div>
 
@@ -265,7 +320,7 @@ function App() {
             <div className="orbit-ring ring-one" />
             <div className="orbit-ring ring-two" />
             <div className="orbit-core">
-              <div className="core-label">LIVE MARKET</div>
+              <div className="core-label">DEMO MARKET</div>
               <strong>{selectedMarket.question}</strong>
             </div>
           </div>
@@ -273,11 +328,11 @@ function App() {
 
         <section className="ticker">
           <div className="ticker-inner">
-            <span>MARKETS LIVE</span>
+            <span>DEMO PREVIEW</span>
             <i />
-            <span className="ticker-item">SOL / $184.22 <b className="up">+3.8%</b></span>
-            <span className="ticker-item">BTC / $63.1K <b className="down">-1.2%</b></span>
-            <span className="ticker-item">ETH / $81.4K <b className="down">-0.6%</b></span>
+            <span className="ticker-item">OFFICIAL TOKEN <b>BEATX</b></span>
+            <span className="ticker-item">SOLANA TOKEN-2022</span>
+            <span className="ticker-item">6 DECIMALS</span>
           </div>
         </section>
 
@@ -288,6 +343,13 @@ function App() {
               <h2>Trending <em>Beats</em></h2>
             </div>
             <a className="view-link" href="#live">View all markets</a>
+          </div>
+
+          <div className="market-controls">
+            <input aria-label="Search demo markets" type="search" placeholder="Search demo markets…" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
+            <div className="category-filters" aria-label="Filter demo markets by category">
+              {categories.map((category) => <button key={category} className={activeCategory === category ? 'category-chip active' : 'category-chip'} onClick={() => setActiveCategory(category)}>{category}</button>)}
+            </div>
           </div>
 
           <div className="market-grid">
@@ -303,11 +365,11 @@ function App() {
 
                 <div className="card-meta">
                   <div>
-                    <div className="meta-label">Volume</div>
+                    <div className="meta-label">Demo volume</div>
                     <div className="meta-value">{formatVolume(market.volume)}</div>
                   </div>
                   <div>
-                    <div className="meta-label">Participants</div>
+                    <div className="meta-label">Demo participants</div>
                     <div className="meta-value">{market.participants}</div>
                   </div>
                 </div>
@@ -337,7 +399,7 @@ function App() {
               <div className="room-panel">
                 <div className="room-panel-header">
                   <div>
-                    <div className="section-kicker">CURRENT MARKET</div>
+                    <div className="section-kicker">SELECTED DEMO MARKET</div>
                     <h2>{selectedMarket.question}</h2>
                   </div>
                   <button className="ghost" onClick={() => setShowProof(true)}>Proof</button>
@@ -364,19 +426,20 @@ function App() {
                       placeholder="0.01"
                     />
                     <button className="primary" onClick={handlePosition}>
-                      Place bet
+                      Place demo position
                     </button>
                   </div>
 
                   <div className="room-panel-actions">
-                    <button className="secondary" onClick={handleCloseMarket}>Close Market</button>
-                    <button className="secondary" onClick={handleResolve}>Resolve</button>
-                    <button className="secondary" onClick={handleClaim}>Claim</button>
+                    <button className="secondary" disabled={!isApiConfigured} onClick={handleCloseMarket}>Close demo market</button>
+                    <button className="secondary" disabled title="Resolution requires an authorized backend resolver">Resolve (server only)</button>
+                    <button className="secondary" disabled={!isApiConfigured} onClick={handleClaim}>Claim demo payout</button>
                   </div>
+                  <p className="demo-note">Preview only. No wallet transaction is signed and no real BEATX is transferred. Market resolution is restricted to the authorized server.</p>
                 </div>
               </div>
 
-              <div className="sidebar-card">
+              <div className="sidebar-card" id="portfolio">
                 <div className="card-heading">
                   <div>
                     <div className="section-kicker">YOUR SIGNAL</div>
@@ -389,7 +452,7 @@ function App() {
                     portfolio.map((entry) => (
                       <div key={entry.id} className="portfolio-entry">
                         <div className="portfolio-label">{entry.option || entry.marketId}</div>
-                        <div className="portfolio-value">{entry.amount || ''}</div>
+                        <div className="portfolio-value">{formatBaseUnits(entry.amountBaseUnits)}</div>
                       </div>
                     ))
                   ) : (
@@ -401,15 +464,15 @@ function App() {
           </div>
         </section>
 
-        <section className="how-section wrap">
+        <section className="how-section wrap" id="how-it-works">
           <div className="section-kicker">SIMPLE BY DESIGN</div>
           <h2>From curiosity<br />to <em>conviction.</em></h2>
 
           <div className="steps">
             <Step num="01" icon={<Compass size={18} />} title="Connect your wallet" text="Link your Phantom, Solflare, or Backpack wallet." />
             <Step num="02" icon={<Sparkles size={18} />} title="Create a market" text="Draft a question, add outcomes, set your close date." />
-            <Step num="03" icon={<Sparkles size={18} />} title="Place a bet" text="Choose an outcome and lock in your stake." />
-            <Step num="04" icon={<ShieldCheck size={18} />} title="Settle and claim" text="Resolve the market and distribute winnings automatically." />
+            <Step num="03" icon={<Sparkles size={18} />} title="Preview a position" text="Review a BEATX-denominated example. This preview does not transfer tokens." />
+            <Step num="04" icon={<ShieldCheck size={18} />} title="Review settlement proof" text="Resolution requires verified evidence and an authorized server; payouts are not live in this preview." />
           </div>
         </section>
       </main>
@@ -422,8 +485,11 @@ function App() {
           </a>
           <div className="footer-links">
             <a href="#explore">Explore</a>
-            <a href="#create">Create</a>
+            <button type="button" onClick={() => setShowCreate(true)}>Create</button>
             <a href="#portfolio">Portfolio</a>
+            <a href="https://pump.fun/coin/HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump" target="_blank" rel="noreferrer">Official BEATX token</a>
+            <a href="https://explorer.solana.com/address/HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump" target="_blank" rel="noreferrer">Token Explorer</a>
+            <span title="Official BEATX mint">HuoN3N…vpump</span>
           </div>
         </div>
       </footer>

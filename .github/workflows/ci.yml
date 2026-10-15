@@ -28,5 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check Anchor program Rust workspace
-        run: cargo check --manifest-path chains/solana/programs/beatx/Cargo.toml
+      - name: Test release-mode program (official BEATX mint)
+        run: cargo test --locked --manifest-path chains/solana/programs/beatx/Cargo.toml
+      - name: Test Devnet fixture mode (explicit opt-in)
+        env:
+          BEATX_DEVNET_TEST_MINT_ACK: DEVNET_FIXTURE_ONLY_NOT_MAINNET
+        run: cargo test --locked --manifest-path chains/solana/programs/beatx/Cargo.toml --features devnet-test-mint
