@@ -2,17 +2,18 @@
 
 ## Verified in this checkout
 
-- React/Vite now has market search/category filters, explicit demo labels, and responsive components matching the current markup.
-- The browser preview does not sign transactions or move BEATX. Seeded values are marked as demo data.
+- React/Vite is a client-only preview with sample markets, search/category filters, and responsive layouts.
+- The UI intentionally has no wallet connect, API/RPC calls, or Devnet market feed. There are no live markets on Devnet from this site.
+- Visitors can save local demo picks in browser `localStorage`; these are not positions and no BEATX moves.
 - The TypeScript resolver rejects missing/unverified evidence and unsupported deterministic rules; demo API lifecycle tests pass.
 - The Anchor source accepts only the official six-decimal BEATX Token-2022 mint in normal builds, restricts first protocol initialization to the program upgrade authority, and includes post-resolution fee withdrawal.
 - Market storage scales with outcome count; 2 outcomes use 343 bytes including the discriminator versus 583 bytes at the 8-outcome maximum.
-- Host Rust tests/checks passed in both default and `devnet-test-mint` modes. Web typecheck, unit tests, demo E2E, and production build also passed before the final UI refinements; rerun them after any further changes.
+- Host Rust tests/checks passed in both default and `devnet-test-mint` modes. After the local-only UX revision, web typecheck, all 12 unit tests, API E2E, and production build passed. Browser smoke verified that a demo pick saves locally and the page has no wallet control or Devnet/API RPC request.
 
 ## Not yet verified
 
 - Anchor/SBF build or actual BPF binary size.
-- Live Devnet acceptance against the migrated Token-2022 program.
+- Anchor/SBF build, migrated-program Devnet acceptance, and binary size. No live Devnet markets are intended; any future Devnet run must remain a controlled internal fixture test.
 - Any Mainnet deployment or production wallet-signed transaction flow.
 - GitHub Pages publication and DNS/HTTPS propagation for `beatx.world`.
 

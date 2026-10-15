@@ -1,6 +1,6 @@
 # BeatX
 
-BeatX is a Solana prediction-market prototype. This repository currently ships a **demo preview**: the market values and participation figures are fixtures, and the browser does not sign or submit on-chain transactions. The official settlement asset is the BEATX Token-2022 mint listed below; the current preview does not move real BEATX.
+BeatX is a Solana prediction-market prototype. This repository currently ships a **client-only demo preview**: its markets, volumes, and participation figures are sample fixtures. The page makes no wallet, API, RPC, or Devnet connection; there are **no live markets on Devnet** from this preview. Demo picks are saved only in the visitor's browser. The planned official settlement asset is the BEATX Token-2022 mint listed below; the preview never moves real BEATX.
 
 ## Official token
 
@@ -28,13 +28,13 @@ npm run build
 npm run api:build
 ```
 
-The acceptance notes are in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md). In a second terminal, run `npm run api:build && npm run api:start` to start the **loopback-only** in-memory demo API; it requires the random `BEATX_RESOLVER_AUTHORITY` above, is not a production service or a substitute for on-chain settlement, and deliberately refuses to start when `NODE_ENV=production`. Provider failures are marked stale, and the deterministic resolver fails closed when verified evidence is missing, malformed, or the resolution rule is unsupported. The API is not deployed for the GitHub Pages site.
+The acceptance notes are in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md). For isolated API development/tests only, run `npm run api:build && npm run api:start` in a second terminal to start the **loopback-only** in-memory demo API; it requires the random `BEATX_RESOLVER_AUTHORITY` above, is not a production service or a substitute for on-chain settlement, and deliberately refuses to start when `NODE_ENV=production`. The public React preview intentionally does not call this API. Provider failures are marked stale, and the deterministic resolver fails closed when verified evidence is missing, malformed, or the resolution rule is unsupported. The API is not deployed for the GitHub Pages site.
 
 ## What the preview includes
 
-- Responsive market discovery, search, category filters, a proof view, a draft-market form, and portfolio UI.
-- Explicit demo labels; seeded volumes, participant counts, and outcome distributions are **not live market data**.
-- A wallet-connect preview state, but no browser-side signing or real fund transfer.
+- Responsive sample-market discovery with search, category filters, and clear preview labels.
+- Interactive local demo picks stored in `localStorage`; no wallet connection, BeatX backend/API call, Devnet activity, or token transfer is required.
+- All seeded volumes, participant counts, and outcome distributions are **illustrative fixtures, not live market data**.
 - Integer-safe BEATX base-unit math (`1 BEATX = 1,000,000` base units).
 - A deterministic TypeScript domain package for policy hashing, evidence bundles, outcome selection, payout math, and lifecycle guards.
 - An in-memory API and Prisma schema contract; PostgreSQL persistence is not enabled.
@@ -62,4 +62,4 @@ After DNS propagates, check the domain in **GitHub → Settings → Pages**, ena
 - Keep resolver authorization server-side. The public browser must not receive a resolver secret.
 - Initialize protocol settings with the program upgrade authority before renouncing that authority.
 - Build production without `devnet-test-mint`; perform a separate SBF build, Devnet acceptance run, review, and security audit before any Mainnet release.
-- The preview's payout and portfolio flows are not on-chain claims.
+- The preview portfolio contains only local demo picks; it is not an on-chain position or claim.

@@ -2,6 +2,7 @@
 
 ## Verification for this branch
 
+- The public UI is a client-only sample preview. It has no wallet/API/RPC/Devnet connection and creates no live Devnet markets; demo picks stay in browser `localStorage` only.
 - `npm run typecheck`: **PASS**.
 - `npm test`: **PASS**, 12 tests (including fail-closed evidence validation and highest-single-confidence outcome selection).
 - `npm run e2e:demo`: **PASS**, including market lifecycle, protected resolver, owner-checked claims, double-claim rejection, and localhost CORS preflight.
@@ -9,6 +10,7 @@
 - `node --check tests/e2e-solana.mjs`: **PASS**.
 - Host Rust `cargo test --locked -p beatx`: **PASS** with the exact Anchor 0.31.1 lockfile in default mint-enforced mode and in `devnet-test-mint` mode with its explicit build acknowledgment.
 - Host Rust `cargo check --locked -p beatx`: **PASS** in both modes; a negative check confirmed the fixture feature is refused without the explicit acknowledgment.
+- Manual browser smoke: a demo pick appeared in the portfolio and persisted to `localStorage`; the test pick was then cleared. The final page had zero wallet-connect controls, no `#live` anchor, and no matching BeatX API/Solana RPC/Devnet resource requests.
 
 ## External state checked
 
