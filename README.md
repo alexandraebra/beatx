@@ -56,12 +56,14 @@ See [`chains/solana/README.md`](chains/solana/README.md) for build and safety in
 
 ## GitHub Pages and `beatx.world`
 
-The Vite build uses `/` as its base path for the custom apex domain. GitHub Pages is configured for `beatx.world`. The current public DNS resolves the apex to GitHub Pages' four A records and `www` to `alexandraebra.github.io`; GitHub reports that DNS changed and a certificate is being requested, so HTTPS is **not ready yet**. For reference, the Namecheap records should remain on the domain's existing DNS host (do not change nameservers just to add these):
+The Vite build uses `/` as its base path for the custom apex domain. GitHub Pages is configured for `beatx.world`. The DNS currently resolves the apex to GitHub Pages' four A records and `www` to `alexandraebra.github.io`. The public files `sitemap.xml` and `robots.txt` are copied from `public/` into the Pages artifact; only the canonical home page is listed because the app's sections are in-page anchors, not separate URLs. The initial HTML also contains a short, crawlable description of the demo.
+
+At the latest check, GitHub Pages reported `https_certificate.state = dns_changed` (“Requesting a new certificate”) and `https_enforced = false`. Keep HTTPS enforcement disabled until GitHub marks the certificate active/approved; then enable it in **GitHub → Settings → Pages** and verify both apex and `www` over HTTPS. The Namecheap records should remain on the domain's existing DNS host (do not change nameservers just to add these):
 
 - Apex `@`: GitHub Pages A records `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, and `185.199.111.153`.
 - `www`: CNAME to `alexandraebra.github.io`.
 
-After DNS propagates, check the domain in **GitHub → Settings → Pages**, enable **Enforce HTTPS** when GitHub marks the certificate ready, and verify both `https://beatx.world/` and `https://www.beatx.world/`. A merge to `main` triggers the Pages workflow; this branch does not publish to the live site by itself.
+`https://beatx.world/sitemap.xml` and `https://beatx.world/robots.txt` are the public crawler endpoints once TLS is active. A merge to `main` triggers the Pages workflow; this branch does not publish to the live site by itself.
 
 ## Security and deployment boundaries
 
