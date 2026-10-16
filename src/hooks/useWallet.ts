@@ -1,62 +1,144 @@
 import { useCallback, useEffect, useState } from 'react'
-import { connectSolanaWallet, disconnectWallet, getWalletBalance, type WalletState } from '../wallet'
+import type { Wallet, WalletAccount } from '@wallet-standard/base'
+import {
+  canConnectWallet,
+  connectStandardWallet,
+  disconnectStandardWallet,
+  getDevnetBalance,
+  subscribeToWalletChanges,
+  walletRegistry,
+  walletSupportsDevnet,
+} from '../wallet'
+
+export type ConnectedWallet = {
+  wallet: Wallet
+  account: WalletAccount
+  supportsDevnet: boolean
+}
 
 export function useWallet() {
-  const [state, setState] = useState<WalletState>({
-    address: null,
-    isConnected: false,
-    network: 'unknown',
-    balance: 0,
-    source: 'demo',
-    error: null,
-  })
+  const [wallets, setWallets] = useState<readonly Wallet[]>([])
+  const [connection, setConnection] = useState<ConnectedWallet | null>(null)
+  const [balance, setBalance] = useState<number | null>(null)
+  const [balanceError, setBalanceError] = useState('')
+  const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
 
-  const connect = useCallback(async () => {
+  useEffect(() => {
+    const syncWallets = () => {
+      setWallets(walletRegistry.get().filter(canConnectWallet).slice().sort((a, b) => a.name.localeCompare(b.name)))
+    }
+    syncWallets()
+    const stopRegister = walletRegistry.on('register', syncWallets)
+    const stopUnregister = walletRegistry.on('unregister', syncWallets)
+    return () => {
+      stopRegister()
+      stopUnregister()
+    }
+  }, [])
+
+  const connect = useCallback(async (wallet: Wallet) => {
+    setError('')
     setIsLoading(true)
     try {
-      const result = await connectSolanaWallet()
-      setState(result)
-    } catch (error: any) {
-      setState((prev) => ({ ...prev, error: error?.message || 'Connection failed' }))
+      const account = await connectStandardWallet(wallet)
+      setConnection({ wallet, account, supportsDevnet: walletSupportsDevnet(wallet, account) })
+      setBalance(null)
+      setBalanceError('')
+      return true
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Wallet connection failed.')
+      return false
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   const disconnect = useCallback(async () => {
+    const current = connection
     setIsLoading(true)
+    setError('')
     try {
-      await disconnectWallet()
-      setState({
-        address: null,
-        isConnected: false,
-        network: 'unknown',
-        balance: 0,
-        source: 'demo',
-        error: null,
-      })
+      if (current) await disconnectStandardWallet(current.wallet)
+      setConnection(null)
+      setBalance(null)
+      setBalanceError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not disconnect the wallet.')
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [connection])
 
   const refreshBalance = useCallback(async () => {
-    if (!state.address) return
+    if (!connection) return
+    setIsRefreshingBalance(true)
+    setBalanceError('')
     try {
-      const balance = await getWalletBalance(state.address)
-      setState((prev) => ({ ...prev, balance }))
-    } catch (error) {
-      console.error('Balance refresh error:', error)
+      const nextBalance = await getDevnetBalance(connection.account.address)
+      setBalance(nextBalance)
+    } catch (cause) {
+      setBalanceError(cause instanceof Error ? cause.message : 'Could not refresh the Devnet balance.')
+    } finally {
+      setIsRefreshingBalance(false)
     }
-  }, [state.address])
+  }, [connection])
 
   useEffect(() => {
-    if (!state.address || !state.isConnected) return
-    refreshBalance()
-    const timer = setInterval(refreshBalance, 30000)
-    return () => clearInterval(timer)
-  }, [state.address, state.isConnected, refreshBalance])
+    if (!connection) return
+    return subscribeToWalletChanges(connection.wallet, (accounts) => {
+      if (!accounts) return
+      const nextAccount = accounts.find((account) => account.chains.includes('solana:devnet')) ?? accounts[0]
+      if (!nextAccount) {
+        setConnection(null)
+        setBalance(null)
+        return
+      }
+      setConnection({
+        wallet: connection.wallet,
+        account: nextAccount,
+        supportsDevnet: walletSupportsDevnet(connection.wallet, nextAccount),
+      })
+    })
+  }, [connection?.wallet])
 
-  return { ...state, isLoading, connect, disconnect, refreshBalance }
+  useEffect(() => {
+    if (!connection) {
+      setBalance(null)
+      return
+    }
+    let cancelled = false
+    const refresh = async () => {
+      setIsRefreshingBalance(true)
+      setBalanceError('')
+      try {
+        const nextBalance = await getDevnetBalance(connection.account.address)
+        if (!cancelled) setBalance(nextBalance)
+      } catch (cause) {
+        if (!cancelled) setBalanceError(cause instanceof Error ? cause.message : 'Could not refresh the Devnet balance.')
+      } finally {
+        if (!cancelled) setIsRefreshingBalance(false)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [connection?.account.address])
+
+  return {
+    wallets,
+    connection,
+    balance,
+    balanceError,
+    error,
+    isLoading,
+    isRefreshingBalance,
+    connect,
+    disconnect,
+    refreshBalance,
+  }
 }

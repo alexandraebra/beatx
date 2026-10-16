@@ -1,10 +1,13 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TransferChecked};
 
 declare_id!("F852vVx3c4jPKY6VVMRU4CUVhqh5iX79ZRokwKYAu18h");
 
 const MAX_OPTIONS: usize = 8;
 const BPS: u64 = 10_000;
+const FEE_WITHDRAWN_FLAG: u16 = 1 << 15;
+pub const BEATX_MINT: Pubkey = pubkey!("HuoN3NEwkCv7JjZJPjkDWyX4oZ4UXT2hLKFWPnyvpump");
 const OPEN: u8 = 0;
 const LOCKED: u8 = 1;
 const CLOSED: u8 = 2;
@@ -34,6 +37,7 @@ pub mod beatx {
     }
 
     pub fn create_market(ctx: Context<CreateMarket>, market_id: [u8; 32], policy_hash: [u8; 32], option_hashes: Vec<[u8; 32]>, open_time: i64, close_time: i64, resolution_deadline: i64) -> Result<()> {
+        validate_settlement_mint(&ctx.accounts.settlement_mint)?;
         require!(option_hashes.len() >= 2 && option_hashes.len() <= MAX_OPTIONS, BeatXError::InvalidOptions);
         require!(open_time >= Clock::get()?.unix_timestamp && open_time < close_time && close_time <= resolution_deadline, BeatXError::InvalidTimes);
         let market = &mut ctx.accounts.market;
@@ -64,6 +68,7 @@ pub mod beatx {
     }
 
     pub fn place_position(ctx: Context<PlacePosition>, position_id: u64, option_index: u8, amount_base_units: u64) -> Result<()> {
+        validate_settlement_mint(&ctx.accounts.settlement_mint)?;
         let market = &mut ctx.accounts.market;
         let now = Clock::get()?.unix_timestamp;
         require!(market.status == OPEN || market.status == LOCKED, BeatXError::MarketNotOpen);
@@ -84,7 +89,7 @@ pub mod beatx {
         position.amount_base_units = amount_base_units;
         position.claimed = false;
         position.bump = ctx.bumps.position;
-        token::transfer(CpiContext::new(ctx.accounts.token_program.to_account_info(), Transfer { from: ctx.accounts.owner_token_account.to_account_info(), to: ctx.accounts.vault.to_account_info(), authority: ctx.accounts.owner.to_account_info() }), amount_base_units)?;
+        token_interface::transfer_checked(CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked { from: ctx.accounts.owner_token_account.to_account_info(), mint: ctx.accounts.settlement_mint.to_account_info(), to: ctx.accounts.vault.to_account_info(), authority: ctx.accounts.owner.to_account_info() }), amount_base_units, ctx.accounts.settlement_mint.decimals)?;
         Ok(())
     }
 
@@ -100,6 +105,7 @@ pub mod beatx {
         let market = &mut ctx.accounts.market;
         require!(market.status == CLOSED, BeatXError::InvalidStatus);
         require!((winning_option as usize) < market.option_totals.len(), BeatXError::InvalidOption);
+        require!(market.option_totals[winning_option as usize] > 0, BeatXError::NoWinningPositions);
         require!(Clock::get()?.unix_timestamp <= market.resolution_deadline, BeatXError::ResolutionDeadlinePassed);
         market.winning_option = winning_option;
         market.evidence_hash = evidence_hash;
@@ -123,6 +129,7 @@ pub mod beatx {
     }
 
     pub fn claim(ctx: Context<ClaimPosition>) -> Result<()> {
+        validate_settlement_mint(&ctx.accounts.settlement_mint)?;
         let market = &ctx.accounts.market;
         let position = &mut ctx.accounts.position;
         require!(market.status == RESOLVED, BeatXError::ResolutionNotFinal);
@@ -135,26 +142,78 @@ pub mod beatx {
         let payout = (position.amount_base_units as u128).checked_mul(distributable as u128).ok_or(BeatXError::ArithmeticOverflow)? / winning_pool as u128;
         require!(payout <= ctx.accounts.vault.amount as u128, BeatXError::InsufficientVault);
         let seeds: &[&[u8]] = &[b"market", market.authority.as_ref(), market.market_id.as_ref(), &[market.bump]];
-        token::transfer(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer { from: ctx.accounts.vault.to_account_info(), to: ctx.accounts.owner_token_account.to_account_info(), authority: market.to_account_info() }, &[seeds]), payout as u64)?;
+        token_interface::transfer_checked(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), TransferChecked { from: ctx.accounts.vault.to_account_info(), mint: ctx.accounts.settlement_mint.to_account_info(), to: ctx.accounts.owner_token_account.to_account_info(), authority: market.to_account_info() }, &[seeds]), payout as u64, ctx.accounts.settlement_mint.decimals)?;
         Ok(())
     }
 
     pub fn refund_cancelled_position(ctx: Context<ClaimPosition>) -> Result<()> {
+        validate_settlement_mint(&ctx.accounts.settlement_mint)?;
         let market = &ctx.accounts.market;
         let position = &mut ctx.accounts.position;
         require!(market.status == CANCELLED, BeatXError::MarketNotCancelled);
         require!(!position.claimed, BeatXError::DoubleClaim);
         position.claimed = true;
         let seeds: &[&[u8]] = &[b"market", market.authority.as_ref(), market.market_id.as_ref(), &[market.bump]];
-        token::transfer(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer { from: ctx.accounts.vault.to_account_info(), to: ctx.accounts.owner_token_account.to_account_info(), authority: market.to_account_info() }, &[seeds]), position.amount_base_units)?;
+        token_interface::transfer_checked(CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), TransferChecked { from: ctx.accounts.vault.to_account_info(), mint: ctx.accounts.settlement_mint.to_account_info(), to: ctx.accounts.owner_token_account.to_account_info(), authority: market.to_account_info() }, &[seeds]), position.amount_base_units, ctx.accounts.settlement_mint.decimals)?;
         Ok(())
     }
+
+    pub fn withdraw_fees(ctx: Context<WithdrawFees>, fee_kind: u8) -> Result<()> {
+        validate_settlement_mint(&ctx.accounts.settlement_mint)?;
+        let market = &mut ctx.accounts.market;
+        require!(market.status == RESOLVED, BeatXError::ResolutionNotFinal);
+        let authority = ctx.accounts.authority.key();
+        let amount = match fee_kind {
+            0 => {
+                require_keys_eq!(authority, ctx.accounts.config.authority, BeatXError::Unauthorized);
+                require!(market.protocol_fee_bps & FEE_WITHDRAWN_FLAG == 0, BeatXError::FeesAlreadyWithdrawn);
+                market.protocol_fee_bps |= FEE_WITHDRAWN_FLAG;
+                market.protocol_fees_base
+            }
+            1 => {
+                require_keys_eq!(authority, market.authority, BeatXError::Unauthorized);
+                require!(market.creator_fee_bps & FEE_WITHDRAWN_FLAG == 0, BeatXError::FeesAlreadyWithdrawn);
+                market.creator_fee_bps |= FEE_WITHDRAWN_FLAG;
+                market.creator_fees_base
+            }
+            _ => return err!(BeatXError::InvalidFeeKind),
+        };
+        require!(amount > 0, BeatXError::NoFeesToWithdraw);
+        let bump_seed = [market.bump];
+        let seeds: &[&[u8]] = &[b"market", market.authority.as_ref(), market.market_id.as_ref(), &bump_seed];
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.settlement_mint.to_account_info(),
+                    to: ctx.accounts.recipient_token_account.to_account_info(),
+                    authority: market.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+            ctx.accounts.settlement_mint.decimals,
+        )?;
+        Ok(())
+    }
+}
+
+fn validate_settlement_mint(mint: &InterfaceAccount<'_, Mint>) -> Result<()> {
+    require!(mint.decimals == 6, BeatXError::InvalidMintDecimals);
+    #[cfg(not(feature = "devnet-test-mint"))]
+    require_keys_eq!(mint.key(), BEATX_MINT, BeatXError::InvalidSettlementMint);
+    Ok(())
 }
 
 #[derive(Accounts)]
 pub struct InitializeProtocol<'info> {
     #[account(init, payer = authority, space = 8 + ProtocolConfig::SIZE, seeds = [b"protocol"], bump)]
     pub config: Account<'info, ProtocolConfig>,
+    #[account(constraint = program.programdata_address()? == Some(program_data.key()))]
+    pub program: Program<'info, crate::program::Beatx>,
+    #[account(constraint = program_data.upgrade_authority_address == Some(authority.key()) @ BeatXError::Unauthorized)]
+    pub program_data: Account<'info, ProgramData>,
     #[account(mut)] pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -168,15 +227,15 @@ pub struct CreateCreator<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(market_id: [u8; 32])]
+#[instruction(market_id: [u8; 32], policy_hash: [u8; 32], option_hashes: Vec<[u8; 32]>)]
 pub struct CreateMarket<'info> {
     #[account(seeds = [b"protocol"], bump = config.bump)] pub config: Account<'info, ProtocolConfig>,
     #[account(mut, seeds = [b"creator", authority.key().as_ref()], bump = creator.bump)] pub creator: Account<'info, Creator>,
-    #[account(init, payer = authority, space = 8 + Market::SIZE, seeds = [b"market", authority.key().as_ref(), market_id.as_ref()], bump)] pub market: Account<'info, Market>,
-    #[account(init, payer = authority, token::mint = settlement_mint, token::authority = market, seeds = [b"vault", market.key().as_ref()], bump)] pub vault: Account<'info, TokenAccount>,
-    pub settlement_mint: Account<'info, anchor_spl::token::Mint>,
+    #[account(init, payer = authority, space = 8 + Market::space(option_hashes.len().min(MAX_OPTIONS)), seeds = [b"market", authority.key().as_ref(), market_id.as_ref()], bump)] pub market: Account<'info, Market>,
+    #[account(init, payer = authority, token::mint = settlement_mint, token::authority = market, seeds = [b"vault", market.key().as_ref()], bump)] pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub settlement_mint: InterfaceAccount<'info, Mint>,
     #[account(mut)] pub authority: Signer<'info>,
-    pub token_program: Program<'info, Token>, pub system_program: Program<'info, System>, pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, Token2022>, pub system_program: Program<'info, System>, pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
@@ -190,10 +249,11 @@ pub struct MarketAuthority<'info> {
 pub struct PlacePosition<'info> {
     #[account(mut)] pub market: Account<'info, Market>,
     #[account(init, payer = owner, space = 8 + Position::SIZE, seeds = [b"position", market.key().as_ref(), owner.key().as_ref(), position_id.to_le_bytes().as_ref()], bump)] pub position: Account<'info, Position>,
-    #[account(mut, address = market.vault)] pub vault: Account<'info, TokenAccount>,
+    #[account(mut, address = market.vault, token::mint = settlement_mint)] pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub settlement_mint: InterfaceAccount<'info, Mint>,
     #[account(mut)] pub owner: Signer<'info>,
-    #[account(mut, constraint = owner_token_account.owner == owner.key(), constraint = owner_token_account.mint == vault.mint)] pub owner_token_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>, pub system_program: Program<'info, System>,
+    #[account(mut, constraint = owner_token_account.owner == owner.key(), constraint = owner_token_account.mint == settlement_mint.key())] pub owner_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Program<'info, Token2022>, pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -207,10 +267,22 @@ pub struct ResolutionAuthority<'info> {
 pub struct ClaimPosition<'info> {
     #[account(mut)] pub market: Account<'info, Market>,
     #[account(mut, has_one = market, has_one = owner)] pub position: Account<'info, Position>,
-    #[account(mut, address = market.vault)] pub vault: Account<'info, TokenAccount>,
+    #[account(mut, address = market.vault, token::mint = settlement_mint)] pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub settlement_mint: InterfaceAccount<'info, Mint>,
     #[account(mut)] pub owner: Signer<'info>,
-    #[account(mut, constraint = owner_token_account.owner == owner.key(), constraint = owner_token_account.mint == vault.mint)] pub owner_token_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    #[account(mut, constraint = owner_token_account.owner == owner.key(), constraint = owner_token_account.mint == settlement_mint.key())] pub owner_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Program<'info, Token2022>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawFees<'info> {
+    #[account(mut)] pub market: Account<'info, Market>,
+    #[account(seeds = [b"protocol"], bump = config.bump)] pub config: Account<'info, ProtocolConfig>,
+    #[account(mut, address = market.vault, token::mint = settlement_mint)] pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub settlement_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, constraint = recipient_token_account.owner == authority.key(), constraint = recipient_token_account.mint == settlement_mint.key())] pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut)] pub authority: Signer<'info>,
+    pub token_program: Program<'info, Token2022>,
 }
 
 #[account]
@@ -227,7 +299,10 @@ pub struct Market {
     pub open_time: i64, pub close_time: i64, pub resolution_deadline: i64, pub status: u8, pub winning_option: u8, pub vault: Pubkey,
     pub total_volume: u64, pub option_totals: Vec<u64>, pub protocol_fee_bps: u16, pub creator_fee_bps: u16, pub protocol_fees_base: u64, pub creator_fees_base: u64, pub evidence_hash: [u8; 32], pub bump: u8,
 }
-impl Market { const SIZE: usize = 32 + 32 + 32 + 32 + 4 + MAX_OPTIONS * 32 + 8 + 8 + 8 + 1 + 1 + 32 + 8 + 4 + MAX_OPTIONS * 8 + 2 + 2 + 8 + 8 + 32 + 1; }
+impl Market {
+    const BASE_SIZE: usize = 255;
+    fn space(option_count: usize) -> usize { Self::BASE_SIZE + option_count * (32 + 8) }
+}
 
 #[account]
 pub struct Position { pub market: Pubkey, pub owner: Pubkey, pub position_id: u64, pub option_index: u8, pub amount_base_units: u64, pub claimed: bool, pub bump: u8 }
@@ -253,4 +328,28 @@ pub enum BeatXError {
     #[msg("Arithmetic overflow")] ArithmeticOverflow,
     #[msg("Market is already open")] MarketAlreadyOpen,
     #[msg("Market is not cancelled")] MarketNotCancelled,
+    #[msg("Only the official BEATX mint is accepted")]
+    InvalidSettlementMint,
+    #[msg("BEATX mint must use six decimals")]
+    InvalidMintDecimals,
+    #[msg("Invalid fee kind")]
+    InvalidFeeKind,
+    #[msg("This fee has already been withdrawn")]
+    FeesAlreadyWithdrawn,
+    #[msg("There are no fees to withdraw")]
+    NoFeesToWithdraw,
+    #[msg("The selected outcome has no winning positions")]
+    NoWinningPositions,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Market;
+
+    #[test]
+    fn market_account_space_scales_with_option_count() {
+        assert_eq!(8 + Market::space(2), 343);
+        assert_eq!(8 + Market::space(8), 583);
+        assert_eq!((8 + Market::space(8)) - (8 + Market::space(2)), 240);
+    }
 }

@@ -24,7 +24,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run e2e:demo
       - run: npm run build
+      - name: Verify custom domain file in Pages artifact
+        run: test "$(cat dist/CNAME)" = "beatx.world"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

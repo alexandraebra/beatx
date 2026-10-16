@@ -172,9 +172,9 @@ dependencies = [
 
 [[package]]
 name = "anchor-lang"
-version = "0.31.2"
+version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "692027b5a6c203eefad8ba83a984e77e800e0b2429ccf8ca6f86149cfae7b0df"
+checksum = "e6bab117055905e930f762c196e08f861f8dfe7241b92cee46677a3b15561a0a"
 dependencies = [
  "anchor-attribute-access-control",
  "anchor-attribute-account",
@@ -221,17 +221,13 @@ dependencies = [
 
 [[package]]
 name = "anchor-spl"
-version = "0.31.2"
+version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89276ee9ee7a4aecc3cab264189ea5e1d07f99cd96e6b3a3c318f2d65613a69a"
+checksum = "3c08cb5d762c0694f74bd02c9a5b04ea53cefc496e2c27b3234acffca5cd076b"
 dependencies = [
  "anchor-lang",
- "spl-associated-token-account",
- "spl-pod",
  "spl-token",
  "spl-token-2022",
- "spl-token-group-interface",
- "spl-token-metadata-interface",
 ]
 
 [[package]]
@@ -2334,32 +2330,6 @@ dependencies = [
  "thiserror 2.0.20",
  "wasm-bindgen",
  "zeroize",
-]
-
-[[package]]
-name = "spl-associated-token-account"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76fee7d65013667032d499adc3c895e286197a35a0d3a4643c80e7fd3e9969e3"
-dependencies = [
- "borsh 1.8.1",
- "num-derive",
- "num-traits",
- "solana-program",
- "spl-associated-token-account-client",
- "spl-token",
- "spl-token-2022",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "spl-associated-token-account-client"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f8349dbcbe575f354f9a533a21f272f3eb3808a49e2fdc1c34393b88ba76cb"
-dependencies = [
- "solana-instruction",
- "solana-pubkey",
 ]
 
 [[package]]

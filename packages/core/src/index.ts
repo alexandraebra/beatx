@@ -83,7 +83,20 @@ export function calculateProRataPayout(amountBaseUnits: bigint, winningPool: big
 
 export function selectDeterministicOutcome(policy: ResolutionPolicy, observations: Observation[]): string {
   if (policy.options.length === 0) throw new Error('NO_OPTIONS')
-  const ranked = policy.options.map((option) => ({ option, score: observations.filter((item) => item.entityId === option && item.verified).reduce((sum, item) => sum + item.confidence, 0) }))
+  if (policy.rule !== 'Highest verified confidence wins') throw new Error('UNSUPPORTED_RESOLUTION_RULE')
+  const verified = observations.filter((item) => item.verified && policy.options.includes(item.entityId))
+  for (const item of verified) {
+    let sourceUrl: URL
+    try { sourceUrl = new URL(item.sourceUrl) } catch { throw new Error('INVALID_VERIFIED_EVIDENCE') }
+    if (!Number.isFinite(item.confidence) || item.confidence < 0 || item.confidence > 1 || !Number.isFinite(Date.parse(item.observedAt)) || (typeof item.value === 'number' && !Number.isFinite(item.value)) || sourceUrl.protocol !== 'https:') {
+      throw new Error('INVALID_VERIFIED_EVIDENCE')
+    }
+  }
+  const ranked = policy.options.map((option) => {
+    const matched = verified.filter((item) => item.entityId === option)
+    return { option, evidenceCount: matched.length, score: matched.reduce((highest, item) => Math.max(highest, item.confidence), Number.NEGATIVE_INFINITY) }
+  })
+  if (!ranked.some((item) => item.evidenceCount > 0)) throw new Error('NO_VERIFIED_EVIDENCE')
   return ranked.sort((a, b) => b.score - a.score || a.option.localeCompare(b.option))[0].option
 }
 

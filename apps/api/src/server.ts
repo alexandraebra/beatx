@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { createEvidenceBundle, assertCanClaim, assertCanPlacePosition, calculateProRataPayout, policyHash, type MarketState, type ResolutionPolicy } from '../../../packages/core/src/index.js'
-import { collectWithFallback, githubActivityProvider } from '../../../packages/providers/src/index.js'
+import { createEvidenceBundle, assertCanClaim, assertCanPlacePosition, calculateProRataPayout, policyHash, type EvidenceBundle, type MarketState, type ResolutionPolicy } from '../../../packages/core/src/index.js'
+import { collectWithFallback, githubActivityProvider, type ProviderHealth } from '../../../packages/providers/src/index.js'
 
 const port = Number(process.env.PORT ?? 4000)
-const PROTOCOL_FEE_BPS = 100n
-const CREATOR_FEE_BPS = 100n
-const RESOLVER_AUTHORITY = process.env.BEATX_RESOLVER_AUTHORITY ?? 'demo-resolver'
+if (process.env.NODE_ENV === 'production') throw new Error('DEMO_API_DISABLED_IN_PRODUCTION')
+const RESOLVER_AUTHORITY = process.env.BEATX_RESOLVER_AUTHORITY
+if (!RESOLVER_AUTHORITY) throw new Error('BEATX_RESOLVER_AUTHORITY_REQUIRED')
+const CORS_ORIGIN = process.env.BEATX_CORS_ORIGIN ?? 'http://localhost:5173'
 
 type DemoPosition = {
   id: string
@@ -25,8 +26,8 @@ type DemoMarket = MarketState & {
   positions: DemoPosition[]
   policyLocked: boolean
   winningOption?: number
-  evidenceBundle?: any
-  providerHealth?: any
+  evidenceBundle?: EvidenceBundle
+  providerHealth?: ProviderHealth[]
 }
 
 const seedPolicy = (question: string, options: string[]): ResolutionPolicy => ({
@@ -35,6 +36,8 @@ const seedPolicy = (question: string, options: string[]): ResolutionPolicy => ({
   options,
   closeAt: new Date(Date.now() + 86400000 * 2).toISOString(),
   resolutionDeadline: new Date(Date.now() + 86400000 * 4).toISOString(),
+  rule: 'Highest verified confidence wins',
+  sources: ['https://api.github.com'],
 })
 
 const markets: DemoMarket[] = []
@@ -54,8 +57,6 @@ async function addSeed(id: string, question: string, category: string, options: 
     closeAt: Date.parse(policy.closeAt),
     vaultBaseUnits: 0n,
     optionTotalsBaseUnits: Array(options.length).fill(0n),
-    protocolFeesBaseUnits: 0n,
-    creatorFeesBaseUnits: 0n,
     participants: new Set(),
     positions: [],
   })
@@ -67,7 +68,15 @@ const seedsReady = Promise.all([
 ])
 
 function send(response: ServerResponse, status: number, payload: unknown) {
-  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'no-store' })
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'access-control-allow-origin': CORS_ORIGIN,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type, x-beatx-resolver',
+    'access-control-max-age': '600',
+    vary: 'Origin',
+    'cache-control': 'no-store',
+  })
   response.end(JSON.stringify(payload, (_, value) => typeof value === 'bigint' ? value.toString() : value))
 }
 
@@ -92,6 +101,10 @@ function publicMarket(market: DemoMarket) {
     policyHash: market.policyHash,
     closeAt: new Date(market.closeAt).toISOString(),
     resolutionDeadline: new Date(Date.parse(market.policy.resolutionDeadline)).toISOString(),
+    totalVolumeBaseUnits: market.vaultBaseUnits.toString(),
+    optionTotalsBaseUnits: market.optionTotalsBaseUnits.map((value) => value.toString()),
+    participantCount: market.participants.size,
+    demo: true as const,
   }
 }
 
@@ -105,7 +118,34 @@ function publicPosition(market: DemoMarket, position: DemoPosition) {
     wallet: position.wallet,
     claimed: position.claimed,
     payoutBaseUnits: position.payoutBaseUnits?.toString() ?? null,
+    status: market.status !== 'RESOLVED'
+      ? 'OPEN'
+      : position.claimed
+        ? (position.optionIndex === market.winningOption ? 'WON' : 'LOST')
+        : position.optionIndex === market.winningOption ? 'CLAIMABLE' : 'LOST',
   }
+}
+
+async function collectMarketEvidence(market: DemoMarket) {
+  if (process.env.BEATX_E2E_FIXTURE === '1') {
+    return {
+      observations: market.options.map((option, index) => ({
+        entityId: option,
+        metric: 'fixture_confidence',
+        value: index === 0 ? 0.9 : 0.4,
+        source: 'BeatX E2E fixture',
+        sourceType: 'fixture',
+        sourceUrl: 'https://example.com/beatx-e2e-fixture',
+        observedAt: new Date().toISOString(),
+        verified: true,
+        confidence: index === 0 ? 0.9 : 0.4,
+      })),
+      health: [{ provider: 'e2e-fixture', healthy: true, stale: false, checkedAt: new Date().toISOString() }],
+    }
+  }
+
+  const results = await Promise.all(market.options.map((option) => collectWithFallback(githubActivityProvider, option)))
+  return { observations: results.flatMap((result) => result.observations), health: results.map((result) => result.health) }
 }
 
 function getMarket(path: string) {
@@ -130,8 +170,13 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && path.startsWith('/api/portfolio/')) {
       const wallet = decodeURIComponent(path.split('/')[3] ?? '')
       if (!wallet) return send(response, 400, { error: 'WALLET_REQUIRED' })
-      const positions = markets.flatMap((market) => market.positions.filter((position) => position.wallet === wallet).map((position) => publicPosition(market, position)))
-      const claimableBaseUnits = positions.reduce((sum, position) => sum + (position.claimed ? 0n : 0n), 0n)
+      const matching = markets.flatMap((market) => market.positions.filter((position) => position.wallet === wallet).map((position) => ({ market, position })))
+      const positions = matching.map(({ market, position }) => publicPosition(market, position))
+      const claimableBaseUnits = matching.reduce((sum, { market, position }) => {
+        if (market.status !== 'RESOLVED' || position.claimed || position.optionIndex !== market.winningOption) return sum
+        const winningPool = market.optionTotalsBaseUnits[market.winningOption as number]
+        return sum + calculateProRataPayout(position.amountBaseUnits, winningPool, market.vaultBaseUnits)
+      }, 0n)
       return send(response, 200, { data: { wallet, positions, claimableBaseUnits }, demo: true })
     }
 
@@ -151,14 +196,22 @@ const server = createServer(async (request, response) => {
       const body = await readJson(request)
       const question = typeof body.question === 'string' ? body.question.trim() : ''
       const options = Array.isArray(body.options) ? body.options.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()) : []
-      if (question.length < 12 || options.length < 2 || options.length > 8) return send(response, 400, { error: 'INVALID_MARKET_INPUT' })
+      if (question.length < 12 || question.length > 160 || options.length < 2 || options.length > 8 || new Set(options.map((item) => item.toLowerCase())).size !== options.length) return send(response, 400, { error: 'INVALID_MARKET_INPUT' })
+
+      const closeAt = typeof body.closeAt === 'string' ? body.closeAt : new Date(Date.now() + 86400000 * 2).toISOString()
+      const resolutionDeadline = typeof body.resolutionDeadline === 'string' ? body.resolutionDeadline : new Date(Date.now() + 86400000 * 4).toISOString()
+      const closeAtMs = Date.parse(closeAt)
+      const resolutionDeadlineMs = Date.parse(resolutionDeadline)
+      if (!Number.isFinite(closeAtMs) || !Number.isFinite(resolutionDeadlineMs) || closeAtMs <= Date.now() || resolutionDeadlineMs <= closeAtMs) return send(response, 400, { error: 'INVALID_MARKET_TIMES' })
 
       const policy: ResolutionPolicy = {
         marketType: body.marketType === 'YES_NO' ? 'YES_NO' : 'MULTIPLE_CHOICE',
         question,
         options,
-        closeAt: typeof body.closeAt === 'string' ? body.closeAt : new Date(Date.now() + 86400000 * 2).toISOString(),
-        resolutionDeadline: typeof body.resolutionDeadline === 'string' ? body.resolutionDeadline : new Date(Date.now() + 86400000 * 4).toISOString(),
+        closeAt,
+        resolutionDeadline,
+        rule: 'Highest verified confidence wins',
+        sources: Array.isArray(body.sources) ? body.sources.filter((item): item is string => typeof item === 'string') : ['https://api.github.com'],
       }
 
       const market: DemoMarket = {
@@ -174,8 +227,6 @@ const server = createServer(async (request, response) => {
         closeAt: Date.parse(policy.closeAt),
         vaultBaseUnits: 0n,
         optionTotalsBaseUnits: Array(options.length).fill(0n),
-        protocolFeesBaseUnits: 0n,
-        creatorFeesBaseUnits: 0n,
         participants: new Set(),
         positions: [],
       }
@@ -224,6 +275,7 @@ const server = createServer(async (request, response) => {
       const market = getMarket(path)
       if (!market) return send(response, 404, { error: 'MARKET_NOT_FOUND' })
       if (Date.now() < market.closeAt) return send(response, 409, { error: 'CLOSE_TIME_NOT_REACHED', closeAt: new Date(market.closeAt).toISOString() })
+      if (market.status !== 'OPEN' && market.status !== 'LOCKED') return send(response, 409, { error: 'MARKET_CANNOT_BE_CLOSED' })
       market.status = 'CLOSED'
       return send(response, 200, { data: publicMarket(market) })
     }
@@ -239,8 +291,13 @@ const server = createServer(async (request, response) => {
       if (submittedPolicyHash !== market.policyHash) return send(response, 400, { error: 'INVALID_RESOLUTION_POLICY' })
       if (request.headers['x-beatx-resolver'] !== RESOLVER_AUTHORITY) return send(response, 403, { error: 'UNAUTHORIZED_RESOLVER' })
 
-      const provider = await collectWithFallback(githubActivityProvider, 'solana-labs/solana')
-      const bundle = await createEvidenceBundle(market.id, market.policy, provider.observations)
+      const provider = await collectMarketEvidence(market)
+      let bundle: EvidenceBundle
+      try {
+        bundle = await createEvidenceBundle(market.id, market.policy, provider.observations)
+      } catch (error) {
+        return send(response, 409, { error: error instanceof Error ? error.message : 'EVIDENCE_NOT_CONCLUSIVE' })
+      }
       if (typeof body.outcome === 'string' && body.outcome !== bundle.outcome) return send(response, 400, { error: 'OUTCOME_NOT_SUPPORTED_BY_EVIDENCE' })
 
       market.evidenceBundle = bundle
