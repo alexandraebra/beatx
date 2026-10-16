@@ -110,3 +110,93 @@
 .wallet-button:focus-visible,.wallet-modal button:focus-visible{outline:2px solid #b6ff61;outline-offset:3px}
 @media(max-width:650px){.top-actions{gap:6px}.wallet-button{min-height:34px;padding:0 9px;gap:5px;font-size:9px}.wallet-button svg{width:13px;height:13px}.wallet-modal{padding:25px 18px 18px}.wallet-modal h2{font-size:21px}.wallet-option{grid-template-columns:30px minmax(0,1fr);gap:9px}.wallet-option-arrow{grid-column:2;justify-self:start}.wallet-modal-actions{display:grid;grid-template-columns:1fr 1fr}.wallet-refresh{margin-right:0}}
 @media(max-width:420px){.launch-pill{max-width:134px;overflow:hidden;text-overflow:ellipsis}.wallet-button span{max-width:92px;overflow:hidden;text-overflow:ellipsis}.wallet-modal-backdrop{padding:10px}}
+
+
+/* Local demo market creation and claim simulator */
+.market-heading-actions{display:flex;align-items:center;gap:16px}
+.create-market-trigger{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 13px;border:1px solid #43543a;border-radius:4px;background:#172016;color:#d9f5c4;font-size:11px;font-weight:700;transition:.2s}
+.create-market-trigger:hover{border-color:var(--lime);background:#1d291a;color:var(--lime)}
+.create-market-form{display:grid;gap:12px;margin:27px 0 30px;padding:23px;border:1px solid #374534;border-radius:6px;background:linear-gradient(135deg,#151c15,#101315 70%);box-shadow:0 18px 55px #0004}
+.create-form-heading,.create-form-row,.create-outcome-row,.create-form-bottom,.create-actions{display:flex;align-items:center}
+.create-form-heading{justify-content:space-between;margin-bottom:4px}
+.create-form-heading h3{margin:7px 0 0;font-size:19px;letter-spacing:-.6px}
+.close-create{display:grid;place-items:center;width:33px;height:33px;border:1px solid #343b35;border-radius:4px;color:#a8b0a8}
+.close-create:hover{color:#fff;border-color:#687a5f}
+.field-label{display:block;color:#b7c0b8;font-size:10px;font-weight:700}
+.create-input{width:100%;min-height:42px;padding:0 11px;border:1px solid #343b37;border-radius:4px;background:#0c100d;color:#eff4ef;font-size:12px;outline:none}
+.create-input:focus{border-color:#8dbb69;box-shadow:0 0 0 2px #b6ff6117}
+.create-input::placeholder{color:#68726b}
+.create-form-row{justify-content:space-between;gap:18px}
+.create-form-row>div:first-child{width:min(280px,65%)}
+.option-count-note{color:#89948b;font:10px 'DM Mono',monospace}
+.create-outcomes{display:grid;gap:8px}
+.create-outcomes>.field-label{margin:3px 0}
+.create-outcome-row{gap:8px}
+.outcome-index{display:grid;place-items:center;width:30px;height:30px;flex:none;border:1px solid #384335;border-radius:50%;color:var(--lime);font:10px 'DM Mono',monospace}
+.remove-outcome{display:grid;place-items:center;flex:none;width:31px;height:31px;border:1px solid #463634;border-radius:4px;color:#d68f82}
+.remove-outcome:hover{background:#2a1917}
+.create-form-bottom{justify-content:space-between;gap:10px;color:#7d8880;font:9px 'DM Mono',monospace}
+.add-outcome{display:inline-flex;align-items:center;gap:5px;color:#c6eab1;font-size:10px}
+.add-outcome:disabled{opacity:.4;cursor:not-allowed}
+.form-error{margin:0;color:#f0a79d;font-size:11px}
+.create-actions{justify-content:flex-end;gap:8px;margin-top:4px}
+.create-actions .secondary,.create-actions .primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:39px;padding:0 13px;border-radius:4px;font-size:10px;font-weight:800}
+.create-actions .secondary{border:1px solid #3a423c;color:#c4cdc5}
+.create-actions .secondary:hover{border-color:#65755d}
+.create-disclaimer{margin:0;color:#768078;text-align:right;font-size:9px}
+.market-state{position:absolute;right:15px;bottom:14px;color:#83967b;font:8px 'DM Mono',monospace;letter-spacing:.4px}
+.market-state.resolved{color:#d4c8ff}
+.resolved-option-pill{border-color:#749456!important;color:#d7f6c2!important;background:#182218!important}
+.fee-pill{padding:7px 10px;border:1px solid #354232;border-radius:3px;color:#c5dda9;background:#141a13;font:9px 'DM Mono',monospace;white-space:nowrap}
+.market-creator-line{margin:8px 0 0;color:#79827c;font-size:10px}
+.market-creator-line strong{color:#c7d4c8;font-weight:600}
+.settled-badge{border-color:#5c4f80!important;color:#d7caff!important;background:#211d2d!important}
+.resolution-box{display:grid;gap:10px;margin-top:23px;padding:16px;border:1px solid #334231;border-radius:4px;background:linear-gradient(120deg,#151d14,#111514)}
+.resolution-heading{display:flex;align-items:center;justify-content:space-between}
+.resolution-heading strong{display:block;margin-top:6px;color:#e4ebe3;font-size:12px}
+.resolution-icon{display:grid;place-items:center;width:31px;height:31px;border:1px solid #3c4d38;border-radius:50%;color:var(--lime)}
+.resolution-box>p{margin:0;color:#929c92;font-size:10px;line-height:1.55}
+.resolution-controls{display:flex;gap:8px}
+.resolution-controls select{min-width:0;flex:1;height:38px;padding:0 9px;border:1px solid #384039;border-radius:3px;background:#0c100d;color:#e6ece5;font-size:10px}
+.resolve-button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border:1px solid #506641;border-radius:3px;background:#21301c;color:#d9f4c8;font-size:10px;font-weight:800;white-space:nowrap}
+.resolve-button:hover{border-color:var(--lime);color:var(--lime)}
+.resolution-box>small{color:#738078;font-size:9px;line-height:1.5}
+.resolved-summary{padding:13px 0 6px}
+.resolved-stamp{display:inline-flex;align-items:center;gap:6px;color:#c7f0a7;font:9px 'DM Mono',monospace;letter-spacing:.8px}
+.resolved-summary h3{margin:8px 0 15px;color:#edfae6;font-size:24px;letter-spacing:-.7px}
+.settlement-breakdown{display:grid;gap:0;border:1px solid #2f3930;border-radius:4px;background:#101511}
+.settlement-breakdown span{display:flex;justify-content:space-between;gap:12px;padding:10px 11px;border-bottom:1px solid #252d26;color:#929e92;font-size:9px}
+.settlement-breakdown span:last-child{border:0}
+.settlement-breakdown strong{color:#d9e5d7;font:10px 'DM Mono',monospace;text-align:right}
+.resolved-summary>p{color:#828c83;font-size:10px;line-height:1.55}
+.resolved-summary>.text-button{display:inline-flex;align-items:center;gap:6px;color:#d6f3c2;font-size:10px}
+.claims-section{padding-top:96px;padding-bottom:100px}
+.claims-heading{display:flex;align-items:end;justify-content:space-between;gap:30px;margin-bottom:27px}
+.claims-heading h2{margin:10px 0 7px;font-size:40px;letter-spacing:-2px}
+.claims-heading h2 em{color:var(--lime)}
+.claims-heading p{max-width:510px;margin:0;color:#89928e;font-size:11px;line-height:1.6}
+.claim-total{min-width:220px;padding:14px 16px;border:1px solid #3a4933;border-radius:4px;background:#131a12}
+.claim-total span{display:block;color:#8c978b;font:9px 'DM Mono',monospace}
+.claim-total strong{display:block;margin-top:7px;color:#e1f6d2;font:600 20px 'DM Mono',monospace}
+.claim-total small{color:#9bad93;font-size:10px}
+.claim-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.claim-card{display:flex;flex-direction:column;min-height:250px;padding:18px;border:1px solid #282f2c;border-radius:5px;background:linear-gradient(150deg,#141816,#101214);transition:border-color .2s,transform .2s}
+.claim-card:hover{transform:translateY(-2px);border-color:#4d6046}
+.claim-card-top{display:flex;align-items:center;justify-content:space-between}
+.claim-icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid #3d4d37;border-radius:50%;background:#1a2418;color:var(--lime)}
+.claim-role{color:#78847a;font:8px 'DM Mono',monospace;letter-spacing:.8px}
+.claim-card h3{margin:14px 0 4px;color:#e6ebe6;font-size:15px}
+.claim-card>p{margin:0;color:#818b84;font-size:10px}
+.claim-amount,.claim-claimed{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:18px;color:#87918a;font-size:9px}
+.claim-amount strong{color:#d8f1c7;font:600 14px 'DM Mono',monospace;text-align:right}
+.claim-amount small{color:#8f9e8b;font-size:8px}
+.claim-claimed{margin-top:9px;color:#68736c;font-size:8px}
+.claim-claimed strong{color:#9aa59d;font:9px 'DM Mono',monospace;text-align:right}
+.claim-action{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:38px;margin-top:auto;padding:0 11px;border:1px solid #42543b;border-radius:3px;background:#1a2418;color:#d9f4c6;font-size:9px;font-weight:800}
+.claim-action:hover:not(:disabled){border-color:var(--lime);background:#202e1b;color:var(--lime)}
+.claim-action:disabled{cursor:not-allowed;opacity:.45}
+.claims-footnote{display:flex;align-items:flex-start;gap:8px;margin-top:16px;padding:12px 14px;border-left:2px solid #667d53;background:#111512;color:#849087;font-size:9px;line-height:1.55}
+.claims-footnote svg{flex:none;color:#b6ff61}
+@media(max-width:900px){.desktop-nav{gap:16px;margin-left:20px}.claim-grid{grid-template-columns:1fr 1fr}.claim-card:last-child{grid-column:1/-1}.market-heading-actions{gap:9px}.create-market-trigger{padding:0 10px}}
+@media(max-width:650px){.market-heading-actions{align-items:flex-end;flex-direction:column;gap:8px}.market-count{font-size:9px}.create-market-trigger{min-height:35px;font-size:9px}.create-market-form{padding:17px}.claims-heading{align-items:stretch;flex-direction:column;gap:17px}.claim-total{min-width:0}.claim-grid{grid-template-columns:1fr}.claim-card:last-child{grid-column:auto}.claim-card{min-height:220px}.claims-section{padding-top:68px;padding-bottom:70px}.claims-heading h2{font-size:34px}.room-heading{align-items:flex-start;gap:12px;flex-direction:column}.fee-pill{font-size:8px}.resolution-controls{flex-direction:column}.resolve-button{width:100%}.settlement-breakdown span{font-size:8px}.settlement-breakdown strong{font-size:9px}.create-form-bottom{align-items:flex-start;flex-direction:column}.create-actions{justify-content:stretch}.create-actions button{flex:1}}
+@media(max-width:420px){.create-market-form{margin-left:-3px;margin-right:-3px;padding:14px}.create-form-row>div:first-child{width:70%}.claim-total strong{font-size:18px}.claims-footnote{font-size:8px}.market-state{right:11px;bottom:11px}.market-card{min-height:275px}}

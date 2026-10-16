@@ -1,6 +1,6 @@
 # BeatX
 
-BeatX is a Solana prediction-market prototype. This repository currently ships a **client-side demo preview**: its markets, volumes, and participation figures are sample fixtures. The site offers an optional read-only wallet connection to inspect a public address and its Devnet SOL balance; it does not call any signing feature, and there are **no live markets on Devnet** from this preview. Demo picks are saved only in the visitor's browser. The planned official settlement asset is the BEATX Token-2022 mint listed below; the preview never moves real BEATX.
+BeatX is a Solana prediction-market prototype. This repository currently ships a **client-side demo preview**: visitors can create local sample markets, save hypothetical picks, simulate a result, and explore winner, market-creator, and platform fee claims. Markets, liquidity, participation, payouts, and claims are fictional and stored only in the visitor's browser. The optional wallet connection is read-only; there are **no live markets on Devnet**, no wallet signatures, and no real BEATX transfers. The planned official settlement asset is the BEATX Token-2022 mint listed below.
 
 ## Official token
 
@@ -33,9 +33,11 @@ The acceptance notes are in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md). For isol
 ## What the preview includes
 
 - Responsive sample-market discovery with search, category filters, and clear preview labels.
-- Interactive local demo picks stored in `localStorage`; these remain independent from any connected wallet and never create a position or transaction.
+- A local market builder for two to four outcomes; created markets and simulated sample liquidity are stored in `localStorage` and are never published.
+- Interactive local demo picks, result simulation, and claim cards for winner payouts, creator fees, and the platform treasury. The preview fee model is 2% creator + 3% platform; it is educational UI only, not a production fee policy or on-chain claim implementation.
+- Demo picks and claims remain independent from any connected wallet and never create a position or transaction.
 - Optional Wallet Standard connection for compatible browser wallets and wallet in-app browsers. On Android Chrome, Mobile Wallet Adapter is registered for `solana:devnet`; the UI only reads the public address and Devnet SOL balance.
-- All seeded volumes, participant counts, and outcome distributions are **illustrative fixtures, not live market data**.
+- All seeded volumes, participant counts, outcome distributions, and created-market sample liquidity are **illustrative fixtures, not live market data**.
 - Integer-safe BEATX base-unit math (`1 BEATX = 1,000,000` base units).
 - A deterministic TypeScript domain package for policy hashing, evidence bundles, outcome selection, payout math, and lifecycle guards.
 - An in-memory API and Prisma schema contract; PostgreSQL persistence is not enabled.

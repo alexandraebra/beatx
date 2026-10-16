@@ -1,38 +1,44 @@
 # BeatX continuation handoff
 
-## Verified in this checkout
+## Current preview behavior
 
-- React/Vite is a client-side preview with sample markets, search/category filters, responsive layouts, and an optional read-only wallet control.
-- Wallet Standard discovers compatible browser wallets; Mobile Wallet Adapter is registered for Devnet on Android Chrome. iOS Safari requires the wallet app's in-app browser or a supported extension. Connection is for the public address and Devnet SOL balance only; the UI has no transaction signing or live Devnet market feed.
-- Visitors can save local demo picks in browser `localStorage`; these are not positions, are not tied to a connected wallet, and no BEATX moves.
-- The TypeScript resolver rejects missing/unverified evidence and unsupported deterministic rules; demo API lifecycle tests pass.
-- The Anchor source accepts only the official six-decimal BEATX Token-2022 mint in normal builds, restricts first protocol initialization to the program upgrade authority, and includes post-resolution fee withdrawal.
-- Market storage scales with outcome count; 2 outcomes use 343 bytes including the discriminator versus 583 bytes at the 8-outcome maximum.
-- Host Rust tests/checks passed in both default and `devnet-test-mint` modes. Web typecheck, all 12 unit tests, API E2E, and production build pass. Browser smoke verified the read-only wallet dialog and no-wallet guidance; no real extension or mobile wallet was available for authorization testing.
+- React/Vite is a client-side preview with searchable sample markets, category filters, and optional read-only wallet connection.
+- Visitors can create local markets with two to four outcomes, save hypothetical BEATX picks, simulate a result, and inspect winner, creator, and platform claim cards.
+- The demo settlement uses integer base units, a 2% creator share and 3% platform share. Sample liquidity and participants are fictional; rounding dust is assigned to the simulated platform treasury so the pool is fully conserved.
+- Custom markets, picks, simulated payouts, and claim history are saved in browser `localStorage` only. There is no live Devnet market, transaction signing, BEATX transfer, or production claim implementation in this UI.
+- Wallet Standard discovers compatible browser wallets; Mobile Wallet Adapter is registered for Devnet on Android Chrome. Connection reads the public address and Devnet SOL balance only. Real extension authorization and Android/iOS handoff still need device testing.
 
-## Not yet verified
+## Verified in the current UI change
+
+- `npm run typecheck`: passed.
+- `npm test`: passed, 15 tests including demo settlement conservation and fee/rounding cases.
+- `npm run e2e:demo`: passed for the existing API test suite.
+- `npm run build`: passed; CNAME included in `dist`.
+- Browser smoke created a local market, saved a pick, resolved it, claimed all three demo roles, and confirmed persistence after reload. No wallet signature or transaction was used.
+
+## Not yet verified / release gates
 
 - Anchor/SBF build or actual BPF binary size.
-- Anchor/SBF build, migrated-program Devnet acceptance, and binary size. No live Devnet markets are intended; any future Devnet run must remain a controlled internal fixture test.
-- Any Mainnet deployment or production wallet-signed transaction flow.
-- Real wallet authorization and Android/iOS handoff on physical devices; the current web test only verified the no-wallet fallback and built integration.
-- GitHub Pages publication and DNS/HTTPS propagation for `beatx.world`.
+- Migrated-program Devnet acceptance and generated IDL consistency. No live Devnet markets are intended; any Devnet run must remain a controlled internal fixture test.
+- Independent review of protocol authority, fee withdrawal, cancellation/refund, account layouts, and token-extension assumptions.
+- Any Mainnet deployment or production wallet-signed market/claim flow.
+- Real wallet authorization and Android/iOS handoff on physical devices.
+- HTTPS certificate readiness for `beatx.world` should be rechecked with GitHub Pages before claiming TLS is active.
 
-The prior Devnet deployment and its funded E2E report cover the old SPL Token build only; treat them as historical, not proof for the current source.
+The old Devnet deployment and its funded E2E report cover the legacy SPL Token build only; they are historical, not proof for the current Token-2022 source.
 
 ## Continue in this order
 
-1. Rerun web typecheck/tests/build and both Rust test modes.
-2. Build the current Anchor/SBF artifact without `devnet-test-mint` for production; inspect size. Build the test artifact with the feature only for Devnet.
-3. Generate/inspect the matching IDL and run the updated Devnet acceptance script with protected test wallets.
-4. Review authority, fee withdrawal, cancellation/refund, and account-layout security before any deployment.
-5. Publish the reviewed website through the Pages workflow only after confirming the live domain/DNS status; enable HTTPS after certificate readiness.
-6. Test browser extension and Android Chrome MWA on real devices; test iOS through wallet in-app browsers. Keep the wallet flow read-only until deployment review is complete.
-7. Add wallet-signed BEATX transactions only when the Mainnet program and all required production services are ready.
+1. Review and merge the website changes through the PR; GitHub Pages deploys from `main`.
+2. Recheck the deployed site, DNS, and certificate status; enable HTTPS only after GitHub marks the certificate ready.
+3. Install a compatible Anchor/Solana SBF toolchain; build the default mint-enforced artifact and measure binary size.
+4. Build and deploy the `devnet-test-mint` fixture artifact only on Devnet, then run acceptance tests with protected test wallets.
+5. Review/pin the artifact and matching IDL; complete independent security review.
+6. Select a separate Mainnet program ID and implement real wallet-signed flows only after the deployment and product controls are ready.
 
 ## Safety boundaries
 
 - Never commit wallet files, private keys, tokens, RPC credentials, resolver secrets, or machine-specific paths.
 - Never expose the resolver authority to the browser.
 - Never enable `devnet-test-mint` in a Mainnet artifact.
-- Initialize protocol settings while the program upgrade authority is active; do not claim Mainnet readiness from host-only Rust checks.
+- Local claim buttons are educational simulation only; do not describe them as on-chain claims or real earnings.
