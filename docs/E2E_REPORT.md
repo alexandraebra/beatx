@@ -2,21 +2,22 @@
 
 ## Verification for this branch
 
-- The public UI is a client-only sample preview. It has no wallet/API/RPC/Devnet connection and creates no live Devnet markets; demo picks stay in browser `localStorage` only.
+- The public UI is a client-side sample preview. It creates no live Devnet markets and never signs/sends transactions. Optional Wallet Standard/MWA connection reads an address and Devnet SOL balance only; demo picks stay in browser `localStorage` and are not wallet-backed.
 - `npm run typecheck`: **PASS**.
 - `npm test`: **PASS**, 12 tests (including fail-closed evidence validation and highest-single-confidence outcome selection).
 - `npm run e2e:demo`: **PASS**, including market lifecycle, protected resolver, owner-checked claims, double-claim rejection, and localhost CORS preflight.
-- `npm run build`: **PASS**; production Vite bundle built and `dist/CNAME` contains `beatx.world`.
+- `npm run build`: **PASS**; production Vite bundle built, `dist/CNAME` contains `beatx.world`, the wallet identity icon is present, and the JS bundle is 104.35 KiB gzip.
+- `npm audit --omit=dev`: **PASS**, zero reported production vulnerabilities after safe non-breaking updates.
 - `node --check tests/e2e-solana.mjs`: **PASS**.
 - Host Rust `cargo test --locked -p beatx`: **PASS** with the exact Anchor 0.31.1 lockfile in default mint-enforced mode and in `devnet-test-mint` mode with its explicit build acknowledgment.
 - Host Rust `cargo check --locked -p beatx`: **PASS** in both modes; a negative check confirmed the fixture feature is refused without the explicit acknowledgment.
-- Manual browser smoke: a demo pick appeared in the portfolio and persisted to `localStorage`; the test pick was then cleared. The final page had zero wallet-connect controls, no `#live` anchor, and no matching BeatX API/Solana RPC/Devnet resource requests.
+- Manual browser smoke: with no wallet installed, the `Connect wallet` control showed install/mobile guidance. A temporary Wallet Standard mock then connected, fetched the public Devnet balance, displayed the address, and disconnected; no signing feature was supplied or called. The modal was checked to remain fully visible. A real wallet/app was not available in this sandbox, so actual extension authorization and Android/iOS handoff remain to be checked on-device. Demo picks remain local and independent of the wallet flow.
 
 ## External state checked
 
 - Mainnet RPC confirms the official BEATX mint is Token-2022 with 6 decimals, revoked mint/freeze authorities, and metadata-only extensions (no transfer-fee or transfer-hook extension reported).
 - Current Mainnet rent-exemption quotes: 343 bytes = 2,392,680 lamports; 583 bytes = 3,611,880 lamports. The 240-byte saving is 1,219,200 lamports (0.001219200 SOL) per two-outcome market under the queried rent parameters.
-- GitHub Pages is configured for `beatx.world`, and the repository now carries `public/CNAME`; DNS was returning no records at the time checked, and GitHub had not yet marked HTTPS active. The site is therefore **not confirmed live on the custom domain**.
+- GitHub Pages is configured for `beatx.world`, and the repository carries `public/CNAME`. Public DNS now resolves the apex to all four GitHub Pages A records and `www` to `alexandraebra.github.io`. GitHub reports certificate state `dns_changed` and `https_enforced: false`; HTTPS is not ready yet and must be rechecked after deployment.
 
 ## Solana migration status
 

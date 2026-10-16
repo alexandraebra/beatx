@@ -1,6 +1,6 @@
 # BeatX
 
-BeatX is a Solana prediction-market prototype. This repository currently ships a **client-only demo preview**: its markets, volumes, and participation figures are sample fixtures. The page makes no wallet, API, RPC, or Devnet connection; there are **no live markets on Devnet** from this preview. Demo picks are saved only in the visitor's browser. The planned official settlement asset is the BEATX Token-2022 mint listed below; the preview never moves real BEATX.
+BeatX is a Solana prediction-market prototype. This repository currently ships a **client-side demo preview**: its markets, volumes, and participation figures are sample fixtures. The site offers an optional read-only wallet connection to inspect a public address and its Devnet SOL balance; it does not call any signing feature, and there are **no live markets on Devnet** from this preview. Demo picks are saved only in the visitor's browser. The planned official settlement asset is the BEATX Token-2022 mint listed below; the preview never moves real BEATX.
 
 ## Official token
 
@@ -33,11 +33,16 @@ The acceptance notes are in [`docs/E2E_REPORT.md`](docs/E2E_REPORT.md). For isol
 ## What the preview includes
 
 - Responsive sample-market discovery with search, category filters, and clear preview labels.
-- Interactive local demo picks stored in `localStorage`; no wallet connection, BeatX backend/API call, Devnet activity, or token transfer is required.
+- Interactive local demo picks stored in `localStorage`; these remain independent from any connected wallet and never create a position or transaction.
+- Optional Wallet Standard connection for compatible browser wallets and wallet in-app browsers. On Android Chrome, Mobile Wallet Adapter is registered for `solana:devnet`; the UI only reads the public address and Devnet SOL balance.
 - All seeded volumes, participant counts, and outcome distributions are **illustrative fixtures, not live market data**.
 - Integer-safe BEATX base-unit math (`1 BEATX = 1,000,000` base units).
 - A deterministic TypeScript domain package for policy hashing, evidence bundles, outcome selection, payout math, and lifecycle guards.
 - An in-memory API and Prisma schema contract; PostgreSQL persistence is not enabled.
+
+## Wallet preview boundaries
+
+The wallet control connects through Wallet Standard and requests account access only. It does **not** sign messages or transactions, send BEATX, or create markets/positions. Devnet SOL balance is queried from the public Devnet RPC endpoint; a browser wallet may still have a different active cluster, so the page labels this as a read-only Devnet lookup. Android Chrome can use Mobile Wallet Adapter with a compatible wallet app. MWA is not supported in iOS Safari; on iPhone/iPad, open BeatX inside the wallet app's browser or use a supported wallet extension. See the [Solana wallet guide](https://solana.com/developers/cookbook/wallets/connect-wallet-react) and [Solana Mobile browser compatibility](https://docs.solanamobile.com/developers/mobile-wallet-adapter-web).
 
 ## Solana program status
 
@@ -49,7 +54,7 @@ See [`chains/solana/README.md`](chains/solana/README.md) for build and safety in
 
 ## GitHub Pages and `beatx.world`
 
-The Vite build uses `/` as its base path for the custom apex domain. GitHub Pages is configured for `beatx.world`; DNS and certificate activation must finish before the public site can load over HTTPS. For a typical Namecheap DNS setup, configure records on the domain's existing DNS host (do not change nameservers just to add these):
+The Vite build uses `/` as its base path for the custom apex domain. GitHub Pages is configured for `beatx.world`. The current public DNS resolves the apex to GitHub Pages' four A records and `www` to `alexandraebra.github.io`; GitHub reports that DNS changed and a certificate is being requested, so HTTPS is **not ready yet**. For reference, the Namecheap records should remain on the domain's existing DNS host (do not change nameservers just to add these):
 
 - Apex `@`: GitHub Pages A records `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, and `185.199.111.153`.
 - `www`: CNAME to `alexandraebra.github.io`.

@@ -1,69 +1,100 @@
-import type { WalletState } from './types'
+import { getWallets } from '@wallet-standard/app'
+import type { Wallet, WalletAccount } from '@wallet-standard/base'
+import {
+  StandardConnect,
+  StandardDisconnect,
+  StandardEvents,
+  type StandardConnectFeature,
+  type StandardDisconnectFeature,
+  type StandardEventsFeature,
+} from '@wallet-standard/features'
+import {
+  createDefaultAuthorizationCache,
+  createDefaultChainSelector,
+  createDefaultWalletNotFoundHandler,
+  registerMwa,
+  SolanaMobileWalletAdapterWalletName,
+} from '@solana-mobile/wallet-standard-mobile'
 
-type PublicKeyLike = { toString(): string; toBase58?: () => string }
-type InjectedSolanaProvider = {
-  publicKey?: PublicKeyLike | null
-  connect?: () => Promise<{ publicKey?: PublicKeyLike } | void>
-  disconnect?: () => Promise<void> | void
+export const SOLANA_DEVNET_CHAIN = 'solana:devnet'
+export const SOLANA_DEVNET_RPC = 'https://api.devnet.solana.com'
+export const MOBILE_WALLET_NAME = SolanaMobileWalletAdapterWalletName
+
+const browserWindow = typeof window === 'undefined' ? undefined : window as Window & { __beatxMwaRegistered?: boolean }
+
+if (browserWindow && !browserWindow.__beatxMwaRegistered) {
+  registerMwa({
+    appIdentity: {
+      name: 'BeatX',
+      uri: browserWindow.location.origin,
+      icon: `${browserWindow.location.origin}/beatx-wallet-icon.svg`,
+    },
+    authorizationCache: createDefaultAuthorizationCache(),
+    chains: [SOLANA_DEVNET_CHAIN],
+    chainSelector: createDefaultChainSelector(),
+    onWalletNotFound: createDefaultWalletNotFoundHandler(),
+  })
+  browserWindow.__beatxMwaRegistered = true
 }
 
-type SolanaWalletWindow = Window & {
-  solana?: InjectedSolanaProvider
-  phantom?: { solana?: InjectedSolanaProvider }
-  solflare?: InjectedSolanaProvider
-  backpack?: { solana?: InjectedSolanaProvider }
+export const walletRegistry = getWallets()
+
+export function walletSupportsDevnet(wallet: Wallet, account?: WalletAccount): boolean {
+  const accountSupportsDevnet = !account || account.chains.includes(SOLANA_DEVNET_CHAIN)
+  return wallet.chains.includes(SOLANA_DEVNET_CHAIN) && accountSupportsDevnet
 }
 
-let activeProvider: InjectedSolanaProvider | null = null
-
-function findProvider(): InjectedSolanaProvider | undefined {
-  const target = window as SolanaWalletWindow
-  return target.phantom?.solana ?? target.solflare ?? target.backpack?.solana ?? target.solana
+export function canConnectWallet(wallet: Wallet): boolean {
+  const feature = wallet.features[StandardConnect] as StandardConnectFeature[typeof StandardConnect] | undefined
+  return typeof feature?.connect === 'function'
 }
 
-function publicKeyString(key: PublicKeyLike): string {
-  return key.toBase58?.() ?? key.toString()
-}
-
-export async function connectSolanaWallet(): Promise<WalletState> {
-  const provider = findProvider()
-  if (!provider?.connect) {
-    return {
-      address: 'demo-wallet',
-      isConnected: true,
-      network: 'devnet',
-      balance: 0,
-      source: 'demo',
-      error: null,
-    }
+export async function connectStandardWallet(wallet: Wallet): Promise<WalletAccount> {
+  if (!walletSupportsDevnet(wallet)) {
+    throw new Error('This wallet does not advertise Solana Devnet support.')
   }
 
-  const result = await provider.connect()
-  const publicKey = result?.publicKey ?? provider.publicKey
-  if (!publicKey) throw new Error('Wallet did not provide a public key')
-  activeProvider = provider
-  const address = publicKeyString(publicKey)
-  const balance = await getWalletBalance(address).catch(() => 0)
+  const feature = wallet.features[StandardConnect] as StandardConnectFeature[typeof StandardConnect] | undefined
+  if (typeof feature?.connect !== 'function') {
+    throw new Error('This wallet does not support the standard connection flow.')
+  }
 
-  return { address, isConnected: true, network: 'devnet', balance, source: 'injected', error: null }
+  const { accounts } = await feature.connect()
+  const account = accounts.find((candidate) => candidate.chains.includes(SOLANA_DEVNET_CHAIN)) ?? accounts[0]
+  if (!account) throw new Error('The wallet did not authorize an account.')
+  return account
 }
 
-export async function disconnectWallet(): Promise<void> {
-  const provider = activeProvider
-  activeProvider = null
-  await provider?.disconnect?.()
+export async function disconnectStandardWallet(wallet: Wallet): Promise<void> {
+  const feature = wallet.features[StandardDisconnect] as StandardDisconnectFeature[typeof StandardDisconnect] | undefined
+  await feature?.disconnect()
 }
 
-export async function getWalletBalance(address: string): Promise<number> {
-  if (!address || address === 'demo-wallet') return 0
-  const endpoint = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com'
-  const response = await fetch(endpoint, {
+export function subscribeToWalletChanges(
+  wallet: Wallet,
+  listener: (accounts: readonly WalletAccount[] | undefined) => void,
+): () => void {
+  const feature = wallet.features[StandardEvents] as StandardEventsFeature[typeof StandardEvents] | undefined
+  if (typeof feature?.on !== 'function') return () => undefined
+  return feature.on('change', ({ accounts }) => listener(accounts))
+}
+
+export async function getDevnetBalance(address: string): Promise<number> {
+  const response = await fetch(SOLANA_DEVNET_RPC, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address, { commitment: 'confirmed' }] }),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBalance',
+      params: [address, { commitment: 'confirmed' }],
+    }),
   })
-  if (!response.ok) throw new Error('Could not read wallet balance')
+
+  if (!response.ok) throw new Error('Could not read the Devnet balance.')
   const payload = await response.json() as { result?: { value?: number }; error?: { message?: string } }
-  if (payload.error || typeof payload.result?.value !== 'number') throw new Error(payload.error?.message || 'Invalid balance response')
+  if (payload.error || typeof payload.result?.value !== 'number') {
+    throw new Error(payload.error?.message || 'The Devnet RPC returned an invalid balance.')
+  }
   return payload.result.value / 1_000_000_000
 }

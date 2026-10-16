@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Check, Compass, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react'
 import type { Position } from './types'
+import { WalletButton } from './WalletButton'
 import './styles.css'
 
 type Category = 'All' | 'Crypto' | 'Technology' | 'Games' | 'Social' | 'Science'
@@ -119,7 +120,7 @@ function App() {
       status: 'OPEN',
     }
     setPortfolio((current) => [pick, ...current])
-    notify(`${option.label} saved as a demo pick. No wallet, Devnet, or tokens involved.`)
+    notify(`${option.label} saved as a local demo pick. No wallet or Devnet transaction involved.`)
   }
 
   const clearDemoPicks = () => {
@@ -148,6 +149,7 @@ function App() {
 
         <div className="top-actions">
           <span className="launch-pill"><Sparkles size={14} /> Mainnet launch in preparation</span>
+          <WalletButton />
         </div>
       </header>
 
@@ -161,7 +163,7 @@ function App() {
             </div>
 
             <h1>Pick a side.<br /><em>See what happens.</em></h1>
-            <p>Explore sample markets and save a playful demo pick. No wallet, Devnet activity, or real BEATX required.</p>
+            <p>Explore sample markets and save a playful demo pick. Wallet connection is optional and read-only on Devnet—no real BEATX required.</p>
 
             <div className="hero-actions">
               <a className="primary" href="#explore"><Compass size={15} /> Explore demo markets</a>
@@ -246,7 +248,7 @@ function App() {
           <div className="wrap">
             <div className="section-heading room-heading">
               <div>
-                <div className="section-kicker">A NO-WALLET PREVIEW</div>
+                <div className="section-kicker">LOCAL PICKS · OPTIONAL DEVNET WALLET</div>
                 <h2>Make your <em>demo pick.</em></h2>
               </div>
             </div>
@@ -283,7 +285,7 @@ function App() {
                     </div>
                   </div>
                   <button type="button" className="primary pick-submit" onClick={handleDemoPick}><Sparkles size={15} /> Save my demo pick</button>
-                  <p className="demo-note">This is a local simulation saved only in this browser. No wallet connects, nothing is sent to Devnet, and no tokens move.</p>
+                  <p className="demo-note">This pick is saved only in this browser. A connected wallet is never used for demo picks; BeatX only reads its public Devnet address and SOL balance.</p>
                 </div>
               </div>
 
